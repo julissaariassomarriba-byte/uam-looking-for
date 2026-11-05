@@ -1,0 +1,74 @@
+{# Página de acceso. Con registro=True muestra el formulario para que un estudiante cree su cuenta. #}
+{% from 'macros.html' import icono %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#00939c">
+    <title>{{ 'Crear cuenta' if registro else 'Entrar al sitio' }} | UAM Looking For</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body class="pagina-acceso">
+    <main class="acceso-tarjeta">
+        <div class="acceso-logo">
+            <div class="logo-marca">{{ icono('lupa') }}</div>
+            <div class="logo-texto">
+                <span class="logo-pastilla">UAM</span>
+                <span class="logo-sub">LOOKING FOR</span>
+            </div>
+        </div>
+        <p class="acceso-eslogan">OBJETOS PERDIDOS Y ENCONTRADOS</p>
+
+        <h1 class="acceso-titulo">Sistema de objetos perdidos del campus</h1>
+        <p class="acceso-aviso">
+            {% if registro %}Crea tu cuenta de <strong>estudiante</strong> con tu <strong>CIF</strong>, tu nombre y una contraseña.
+            {% else %}Estimado/a usuario/a, inicia sesión con tu <strong>CIF</strong> y contraseña.{% endif %}
+        </p>
+
+        {% for categoria, mensaje in get_flashed_messages(with_categories=true) %}
+            <div class="alerta {{ categoria }}">{{ mensaje }}</div>
+        {% endfor %}
+
+        {% if registro %}
+        <form id="form-registro" method="POST" action="{{ url_for('registro') }}" class="acceso-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="campo">{{ icono('usuario') }}<input type="text" name="nombre" value="{{ datos.get('nombre', '') }}" placeholder="Nombre completo" aria-label="Nombre completo" required minlength="3" autocomplete="name"></div>
+            <div class="campo">{{ icono('carne') }}<input type="text" name="cif" value="{{ datos.get('cif', '') }}" placeholder="CIF" aria-label="CIF" required minlength="4" autocomplete="username"></div>
+            <div class="campo">{{ icono('bandeja') }}<input type="email" name="correo" value="{{ datos.get('correo', '') }}" placeholder="Correo (para avisarte)" aria-label="Correo" required autocomplete="email"></div>
+            <div class="campo">{{ icono('candado') }}<input type="password" name="contrasena" placeholder="Contraseña (mín. 6 caracteres)" aria-label="Contraseña" required minlength="6" autocomplete="new-password"><button type="button" class="ver-clave" aria-label="Mostrar contraseña">{{ icono('ojo') }}</button></div>
+            <div class="campo">{{ icono('candado') }}<input type="password" name="confirmar" placeholder="Repite la contraseña" aria-label="Repite la contraseña" required minlength="6" autocomplete="new-password"><button type="button" class="ver-clave" aria-label="Mostrar contraseña">{{ icono('ojo') }}</button></div>
+            <button type="submit" class="btn btn-bloque">Crear cuenta</button>
+        </form>
+        <p class="acceso-cambio">¿Ya tienes cuenta? <a href="{{ url_for('login') }}">Inicia sesión</a></p>
+        {% else %}
+        <form id="form-login" method="POST" action="{{ url_for('login') }}" class="acceso-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="campo">{{ icono('usuario') }}<input type="text" name="cif" placeholder="CIF (nombre de usuario)" aria-label="CIF" required autocomplete="username"></div>
+            <div class="campo">{{ icono('candado') }}<input type="password" name="contrasena" placeholder="Contraseña" aria-label="Contraseña" required autocomplete="current-password"><button type="button" class="ver-clave" aria-label="Mostrar contraseña">{{ icono('ojo') }}</button></div>
+            <button type="submit" class="btn btn-bloque">Acceder</button>
+        </form>
+        <p class="acceso-cambio">¿Eres estudiante y no tienes cuenta?</p>
+        <a href="{{ url_for('registro') }}" class="btn btn-claro btn-bloque">{{ icono('birrete') }} Crear cuenta de estudiante</a>
+        {% endif %}
+
+        <div class="acceso-ayuda">
+            <h3>¿Qué hacer si no puedes acceder?</h3>
+            <ul>
+                <li>Verifica que estés digitando correctamente tu usuario (CIF) y contraseña.</li>
+                <li>Si olvidaste tu contraseña, comunícate con la oficina de Vida Estudiantil.</li>
+                <li>Los estudiantes pueden crear su cuenta aquí. Las cuentas de encargados las crea el administrador.</li>
+            </ul>
+        </div>
+
+    </main>
+
+    <script>
+        // Muestra u oculta la contraseña.
+        document.querySelectorAll('.ver-clave').forEach(boton => boton.addEventListener('click', () => {
+            const input = boton.previousElementSibling;
+            input.type = input.type === 'password' ? 'text' : 'password';
+        }));
+    </script>
+</body>
+</html>

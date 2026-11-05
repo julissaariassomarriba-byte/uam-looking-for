@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icono %}
+
+{% block contenido %}
+<div class="panel formulario">
+    <h2>Recibir objeto</h2>
+    <p class="texto-suave intro-seccion">Completa los tres pasos mientras la persona está en ventanilla. Los campos con * son obligatorios.</p>
+    <form method="POST" enctype="multipart/form-data" data-un-envio>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="envio" value="{{ envio }}">
+
+        <fieldset class="paso-form">
+            <legend><span class="paso-numero">1</span> ¿Quién lo entrega?</legend>
+            <label class="casilla">
+                <input type="checkbox" id="sin_persona" name="sin_persona" value="1" {{ 'checked' if datos.get('sin_persona') }}>
+                Lo encontró el personal (no hay que registrar a nadie)
+            </label>
+            <div class="form-grid" id="datos-persona">
+                <div>
+                    <label for="persona_cif">CIF o cédula <span class="texto-suave">(opcional para visitantes)</span></label>
+                    <input type="text" id="persona_cif" name="persona_cif" value="{{ datos.get('persona_cif', '') }}" placeholder="Si ya vino antes, basta con esto">
+                </div>
+                <div>
+                    <label for="persona_tipo">Tipo de persona *</label>
+                    <select id="persona_tipo" name="persona_tipo">
+                        <option value="">Elige…</option>
+                        {% for t in tipos_persona %}<option value="{{ t }}" {{ 'selected' if datos.get('persona_tipo') == t }}>{{ 'Personal administrativo' if t == 'Administrativo' else t }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="ancho-completo">
+                    <label for="persona_nombre">Nombre completo *</label>
+                    <input type="text" id="persona_nombre" name="persona_nombre" value="{{ datos.get('persona_nombre', '') }}" placeholder="Ej. María López">
+                </div>
+                <div>
+                    <label for="persona_telefono">Teléfono <span class="texto-suave">(opcional)</span></label>
+                    <input type="tel" id="persona_telefono" name="persona_telefono" value="{{ datos.get('persona_telefono', '') }}" placeholder="Ej. 8888 8888">
+                </div>
+                <div>
+                    <label for="persona_correo">Correo <span class="texto-suave">(opcional)</span></label>
+                    <input type="email" id="persona_correo" name="persona_correo" value="{{ datos.get('persona_correo', '') }}" placeholder="Ej. nombre@uam.edu.ni">
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset class="paso-form">
+            <legend><span class="paso-numero">2</span> ¿Qué objeto es?</legend>
+            <div class="form-grid">
+                <div>
+                    <label for="titulo">Nombre del objeto *</label>
+                    <input type="text" id="titulo" name="titulo" value="{{ datos.get('titulo', '') }}" placeholder="Ej. Mochila azul, Calculadora" required>
+                </div>
+                <div>
+                    <label for="categoria">Categoría *</label>
+                    <div class="select-con-icono">
+                        <span class="select-icono" id="icono-categoria">
+                            {% for nombre, ic in categorias.items() %}
+                                <span data-cat="{{ nombre }}" {{ 'hidden' if not loop.first }}>{{ icono(ic) }}</span>
+                            {% endfor %}
+                        </span>
+                        <select id="categoria" name="categoria" required>
+                            {% for nombre in categorias %}<option value="{{ nombre }}" {{ 'selected' if datos.get('categoria') == nombre }}>{{ nombre }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="ancho-completo subir-foto">
+                    <label for="foto">Fotografía <span class="texto-suave">(opcional)</span></label>
+                    <input type="file" id="foto" name="foto" accept="image/*" data-foto data-vista="vista-foto" data-info="info-foto">
+                    <p class="texto-suave" id="info-foto">Se reduce sola antes de enviarse (máx. 1280 px y 300 KB). En el celular puedes tomarla con la cámara.</p>
+                    <img id="vista-foto" class="vista-foto" alt="Vista previa de la foto" hidden>
+                    <label class="casilla">
+                        <input type="checkbox" name="foto_publica" value="1" {{ 'checked' if datos.get('foto_publica') }}>
+                        Mostrar la foto a los estudiantes (no la marques si deja ver señas que solo el dueño debería saber)
+                    </label>
+                </div>
+                <div class="ancho-completo">
+                    <label for="descripcion">Descripción y observaciones * <span class="etiqueta-privada">privada</span></label>
+                    <textarea id="descripcion" name="descripcion" rows="4" placeholder="Color, marca, contenido, estado en que llegó…" required>{{ datos.get('descripcion', '') }}</textarea>
+                </div>
+                <div class="ancho-completo">
+                    <label for="descripcion_publica">Descripción pública <span class="texto-suave">(opcional)</span></label>
+                    <textarea id="descripcion_publica" name="descripcion_publica" rows="2" placeholder="Ej. Mochila de color rojo. Sin lugar, fecha ni señas únicas.">{{ datos.get('descripcion_publica', '') }}</textarea>
+                    <p class="texto-suave">Es lo único que leen los estudiantes además del nombre, la categoría, el estado y dónde retirarlo.</p>
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset class="paso-form">
+            <legend><span class="paso-numero">3</span> ¿Dónde se encontró y dónde queda?</legend>
+            <div class="form-grid">
+                <div class="ancho-completo">
+                    <label for="lugar_encontrado">Lugar donde se encontró * <span class="etiqueta-privada">privada</span></label>
+                    <input type="text" id="lugar_encontrado" name="lugar_encontrado" value="{{ datos.get('lugar_encontrado', '') }}" placeholder="Ej. Aula A-203, debajo de un pupitre" required>
+                </div>
+                <div>
+                    <label for="fecha">Fecha del hallazgo * <span class="etiqueta-privada">privada</span></label>
+                    <input type="date" id="fecha" name="fecha" value="{{ datos.get('fecha') or hoy }}" max="{{ hoy }}" required>
+                </div>
+                <div>
+                    <label for="hora">Hora aproximada <span class="etiqueta-privada">privada</span></label>
+                    <input type="time" id="hora" name="hora" value="{{ datos.get('hora', '') }}">
+                </div>
+                <div class="ancho-completo">
+                    <span class="etiqueta-campo">Se guarda en *</span>
+                    <div class="opciones-ubicacion">
+                        {% for u in ubicaciones %}
+                            <label class="opcion-ubicacion">
+                                <input type="radio" name="ubicacion" value="{{ u }}" required
+                                       {{ 'checked' if datos.get('ubicacion', ubicaciones[0]) == u }}>
+                                <span>{{ icono('ubicacion') }} {{ u }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div>
+                    <label for="estado">Estado</label>
+                    <select id="estado" name="estado">
+                        {% for e in estados_manuales %}<option value="{{ e }}" {{ 'selected' if datos.get('estado') == e }}>{{ e }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+        </fieldset>
+
+        <button type="submit" class="btn">{{ icono('check') }} Guardar objeto</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% include 'foto_script.html' %}
+<script>
+    // Muestra el ícono de la categoría elegida.
+    const selectCategoria = document.getElementById('categoria');
+    const mostrarIcono = () => {
+        document.querySelectorAll('#icono-categoria [data-cat]').forEach(el => el.hidden = el.dataset.cat !== selectCategoria.value);
+    };
+    selectCategoria.addEventListener('change', mostrarIcono);
+    mostrarIcono();
+
+    // Si lo encontró el personal, se ocultan los datos de la persona.
+    const sinPersona = document.getElementById('sin_persona');
+    const datosPersona = document.getElementById('datos-persona');
+    const mostrarPersona = () => { datosPersona.hidden = sinPersona.checked; };
+    sinPersona.addEventListener('change', mostrarPersona);
+    mostrarPersona();
+</script>
+{% endblock %}

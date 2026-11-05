@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icono %}
+
+{% block contenido %}
+<div class="panel formulario">
+    <h2>Editar cuenta de {{ usuario.nombre }}</h2>
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-grid">
+            <div>
+                <label for="nombre">Nombre completo</label>
+                <input type="text" id="nombre" name="nombre" value="{{ datos['nombre'] }}" required>
+            </div>
+            <div>
+                <label for="cif">CIF / cédula (usuario)</label>
+                <input type="text" id="cif" name="cif" value="{{ datos['cif'] }}" required minlength="4">
+            </div>
+            <div>
+                <label for="correo">Correo institucional</label>
+                <input type="email" id="correo" name="correo" value="{{ datos['correo'] }}" required>
+            </div>
+            <div>
+                <label for="carrera">Carrera / Departamento</label>
+                <input type="text" id="carrera" name="carrera" value="{{ datos['carrera'] or '' }}">
+            </div>
+            <div>
+                <label for="rol">Rol</label>
+                <select id="rol" name="rol" required>
+                    {% for r in roles %}<option value="{{ r }}" {{ 'selected' if datos['rol'] == r }}>{{ r }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="contrasena">Nueva contraseña (opcional)</label>
+                <input type="password" id="contrasena" name="contrasena" minlength="6" autocomplete="new-password" placeholder="Déjala vacía para no cambiarla">
+            </div>
+        </div>
+        <p class="texto-suave">Estado actual: {{ 'Activa' if usuario.activo else 'Desactivada' }}. Para activarla o desactivarla usa el botón de la lista de cuentas.</p>
+        <div class="acciones-fila">
+            <button type="submit" class="btn">Guardar cambios</button>
+            <a href="{{ url_for('admin_usuarios') }}" class="btn btn-claro">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

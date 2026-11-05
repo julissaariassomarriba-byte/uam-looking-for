@@ -1,0 +1,344 @@
+"""UAM Looking For v7.1: sistema de objetos perdidos y encontrados del campus (Flask + SQLite)."""
+from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, abort, g
+
+import base_datos as bd
+import imagenes
+import logica
+import migrar
+import reporte_pdf
+from config import (CATEGORIAS, ESTADOS, ESTADOS_MANUALES, ESTADOS_RECLAMACION, ROL_ADMIN, ROL_ESTUDIANTE,
+                    ROLES_GESTIONABLES, ROLES_PERSONAL, TIPOS_PERSONA, UBICACIONES, leer_env)
+
+app = Flask(__name__)
+app.secret_key = leer_env().get('SECRET_KEY') or bd.token()  # sin SECRET_KEY, las sesiones duran hasta reiniciar
+# MAX_CONTENT_LENGTH: Flask corta cualquier envío de más de 2 MB antes de leerlo (las fotos llegan ya reducidas).
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax', MAX_CONTENT_LENGTH=2 * 1024 * 1024)
+app.jinja_env.filters['mes'] = logica.mes_legible
+migrar.migrar_si_hace_falta(bd.RUTA_BD)
+bd.crear_tablas()
+logica.sincronizar_admin(leer_env())
+
+
+# Sesión, permisos y token CSRF (se revisan en el servidor en cada petición)
+
+@app.before_request
+def cargar_usuario():
+    g.usuario = bd.buscar_usuario(session['usuario_id']) if 'usuario_id' in session else None
+    if 'usuario_id' in session and (not g.usuario or not g.usuario['activo']):
+        session.clear()
+        flash('Tu cuenta no está activa. Comunícate con el administrador.', 'error')
+        return redirect(url_for('login'))
+    # El administrador solo vale mientras coincida con el .env y haya entrado por /admin.
+    if tiene_rol(ROL_ADMIN) and not (session.get('acceso_admin') and logica.es_admin_del_env(g.usuario, leer_env())):
+        session.clear()
+        return redirect(url_for('admin_panel'))
+    if request.method == 'POST' and request.form.get('csrf_token') != session.get('csrf_token'):
+        abort(400, 'Formulario vencido o inválido. Recarga la página e inténtalo de nuevo.')
+
+
+def tiene_rol(*roles):
+    return bool(g.get('usuario')) and g.usuario['rol'] in roles
+
+
+def token_csrf():
+    if 'csrf_token' not in session:
+        session['csrf_token'] = bd.token()
+    return session['csrf_token']
+
+
+# Muestra el mensaje de una función de logica.py (verde si salió bien, rojo si no) y devuelve si salió bien.
+def avisar(ok, mensaje):
+    flash(mensaje, 'exito' if ok else 'error')
+    return ok
+
+
+# Decorador: exige sesión y, si se indican, alguno de los roles.
+def requiere(*roles, mensaje='', acceso='login'):
+    def decorador(vista):
+        def envoltura(*args, **kwargs):
+            if not g.usuario:
+                flash('Debes iniciar sesión para continuar.', 'error')
+                return redirect(url_for(acceso))
+            if roles and not tiene_rol(*roles):
+                flash(mensaje, 'error')
+                return redirect(url_for('inicio'))
+            return vista(*args, **kwargs)
+        envoltura.__name__ = vista.__name__
+        return envoltura
+    return decorador
+
+
+login_requerido = requiere()
+encargado_requerido = requiere(*ROLES_PERSONAL, mensaje='Acceso restringido: solo el encargado puede entrar a esta sección.')
+estudiante_requerido = requiere(ROL_ESTUDIANTE, mensaje='Solo los estudiantes pueden enviar solicitudes de reclamación.')
+admin_requerido = requiere(ROL_ADMIN, mensaje='Acceso restringido: solo el administrador puede gestionar cuentas.',
+                           acceso='admin_panel')
+
+
+@app.context_processor
+def variables_globales():
+    estudiante = tiene_rol(ROL_ESTUDIANTE)
+    return dict(categorias=CATEGORIAS, estados=ESTADOS, estados_manuales=ESTADOS_MANUALES, usuario_actual=g.get('usuario'),
+                tipos_persona=TIPOS_PERSONA, ubicaciones=UBICACIONES,
+                es_admin=tiene_rol(ROL_ADMIN), es_encargado=tiene_rol(*ROLES_PERSONAL), es_estudiante=estudiante,
+                csrf_token=token_csrf,
+                pendientes=bd.contar_reclamaciones().get('Pendiente', 0) if tiene_rol(*ROLES_PERSONAL) else 0,
+                por_retirar=bd.contar_por_retirar(g.usuario['id']) if estudiante else 0)
+
+
+MENSAJES_ERROR = {403: 'No tienes permiso para realizar esta acción.', 404: 'La página solicitada no existe.',
+                  413: 'El archivo es demasiado grande. Vuelve a elegir la foto desde el formulario: se reduce sola antes de enviarse.',
+                  500: 'Ocurrió un error inesperado. Inténtalo de nuevo.'}
+
+
+def error(e):
+    codigo = getattr(e, 'code', 500)
+    return render_template('error.html', codigo=codigo, mensaje=MENSAJES_ERROR.get(codigo, getattr(e, 'description', ''))), codigo
+
+
+for codigo in (400, 403, 404, 413, 500):
+    app.register_error_handler(codigo, error)
+
+
+# Rutas de acceso
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if g.usuario:
+        return redirect(url_for('inicio'))
+    if request.method == 'POST':
+        usuario = logica.validar_login(request.form.get('cif'), request.form.get('contrasena'))
+        if not usuario:
+            flash('CIF o contraseña incorrectos.', 'error')
+        elif not usuario['activo']:
+            flash('Tu cuenta está desactivada. Comunícate con el administrador del sistema.', 'error')
+        else:
+            session.clear()
+            session['usuario_id'] = usuario['id']
+            flash(f'¡Bienvenido/a {usuario["nombre"]}!', 'exito')
+            return redirect(url_for('inicio'))
+    return render_template('login.html')
+
+
+# Registro público de estudiantes (botón debajo de «Acceder»). Solo crea cuentas con rol Estudiante.
+@app.route('/registro', methods=['GET', 'POST'])
+def registro():
+    if g.usuario:
+        return redirect(url_for('inicio'))
+    f = request.form
+    if request.method == 'POST':
+        ok, resultado = logica.registrar_estudiante(f.get('nombre'), f.get('cif'), f.get('correo'), f.get('contrasena'), f.get('confirmar'))
+        if ok:
+            session.clear()   # antes del aviso: clear() también borraría el mensaje
+            session['usuario_id'] = resultado
+        if avisar(ok, '¡Cuenta creada! Ya puedes buscar y reclamar tus objetos.' if ok else resultado):
+            return redirect(url_for('inicio'))
+    return render_template('login.html', registro=True, datos=f)
+
+
+@app.route('/logout')
+def logout():
+    era_admin = session.get('acceso_admin')
+    session.clear()
+    flash('Has cerrado sesión correctamente.', 'exito')
+    return redirect(url_for('admin_panel' if era_admin else 'login'))
+
+
+# Rutas del catálogo y los objetos
+
+@app.route('/')
+@login_requerido
+def inicio():
+    categoria = request.args.get('categoria') if request.args.get('categoria') in CATEGORIAS else None
+    ubicacion = request.args.get('ubicacion') if request.args.get('ubicacion') in UBICACIONES else None
+    return render_template('index.html', objetos=bd.listar_objetos(categoria, ubicacion, publicos=not tiene_rol(*ROLES_PERSONAL)),
+                           categoria_actual=categoria, ubicacion_actual=ubicacion, por_categoria=bd.contar_objetos_por('categoria'),
+                           por_estado=bd.contar_objetos_por('estado'), por_ubicacion=bd.contar_objetos_por('ubicacion'))
+
+
+# Foto de un objeto, leída de la base. El personal ve todas; un estudiante solo las marcadas como públicas.
+@app.route('/objeto/<int:id>/foto')
+@login_requerido
+def foto(id):
+    f = bd.buscar_foto(id)
+    if not f or not (tiene_rol(*ROLES_PERSONAL) or f['foto_publica']):
+        abort(404)
+    return Response(f['foto'], mimetype=imagenes.formato(f['foto']),
+                    headers={'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff'})
+
+
+@app.route('/guia')
+@login_requerido
+def guia():
+    return render_template('guia.html')
+
+
+@app.route('/objeto/<int:id>', methods=['GET', 'POST'])
+@login_requerido
+def detalle(id, datos_entrega=None):
+    personal = tiene_rol(*ROLES_PERSONAL)
+    if request.method == 'POST' and request.endpoint == 'detalle':
+        if not personal:
+            abort(403)
+        f, yo = request.form, g.usuario['id']
+        avisar(*{'descripcion_publica': lambda: logica.actualizar_descripcion_publica(id, f.get('descripcion_publica'), yo),
+                 'ubicacion': lambda: logica.cambiar_ubicacion(id, f.get('ubicacion'), yo),
+                 'foto': lambda: logica.actualizar_foto(id, request.files.get('foto'), f.get('foto_publica') == '1', yo),
+                 'recuperado': lambda: logica.registrar_recuperacion(id, f.get('observaciones'), yo),
+                 'devolver': lambda: logica.devolver_al_dueno(id, f.get('confirmado') == '1', f.get('observaciones'), yo)
+                 }.get(f.get('accion'), lambda: logica.cambiar_estado_manual(id, f.get('estado'), yo))())
+        return redirect(url_for('detalle', id=id))
+
+    objeto = bd.buscar_objeto(id, publico=not personal) or abort(404)
+    entrega = bd.buscar_entrega(id)
+    if not personal:
+        return render_template('detalle.html', objeto=objeto, lo_retire_yo=bool(entrega) and entrega['retirado_por'] == g.usuario['id'],
+                               mi_reclamacion=bd.listar_reclamaciones('Pendiente', id, g.usuario['id']))
+    return render_template('detalle.html', objeto=objeto, entrega=entrega, aceptada=bd.reclamacion_aceptada(id),
+                           reclamaciones=bd.listar_reclamaciones(objeto_id=id), movimientos=bd.listar_historial(id),
+                           datos_entrega=datos_entrega or {})
+
+
+# El encargado registra quién retira el objeto (entrega inicial). Es la única forma de marcarlo como «Entregado».
+@app.route('/objeto/<int:id>/entregar', methods=['POST'])
+@encargado_requerido
+def entregar(id):
+    f = request.form
+    if avisar(*logica.registrar_entrega(id, f.get('nombre'), f.get('tipo'), f.get('cif'), f.get('telefono'), f.get('senas'),
+                                        f.get('confirmado') == '1', g.usuario['id'])):
+        return redirect(url_for('detalle', id=id))
+    return detalle(id, datos_entrega=f)
+
+
+# Recepción de un objeto. Cada formulario lleva un código «envio»: si llega dos veces (doble clic o recarga),
+# no se crea un objeto repetido, se abre el que ya se guardó.
+@app.route('/reportar', methods=['GET', 'POST'])
+@encargado_requerido
+def reportar():
+    envios = session.get('envios', {})
+    if request.method == 'POST':
+        envio = request.form.get('envio', '')
+        if envio in envios:
+            flash('Este objeto ya estaba registrado; no se guardó dos veces.', 'exito')
+            return redirect(url_for('detalle', id=envios[envio]))
+        ok, resultado = logica.registrar_objeto(request.form, request.files.get('foto'), g.usuario['id'])
+        if avisar(ok, 'Objeto registrado exitosamente.' if ok else resultado):
+            session['envios'] = dict(list(envios.items())[-9:] + [(envio, resultado)])
+            return redirect(url_for('detalle', id=resultado))
+    return render_template('reportar.html', datos=request.form, hoy=bd.ahora()[:10], envio=request.form.get('envio') or bd.token())
+
+
+@app.route('/historial')
+@encargado_requerido
+def historial():
+    return render_template('historial.html', objetos=bd.listar_objetos(), movimientos=bd.listar_historial(),
+                           conteo=bd.contar_objetos_por('estado'))
+
+
+# Descarga el historial como PDF (reporte_pdf.py lo arma sin librerías).
+@app.route('/historial/pdf')
+@encargado_requerido
+def historial_pdf():
+    fecha = bd.ahora()
+    pdf = reporte_pdf.generar_historial(bd.listar_objetos(), bd.listar_historial(), bd.contar_objetos_por('estado'),
+                                        g.usuario['nombre'], fecha)
+    return Response(pdf, mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename=historial_objetos_{fecha[:10]}.pdf'})
+
+
+# Rutas de reclamaciones
+
+@app.route('/objeto/<int:id>/reclamar', methods=['POST'])
+@estudiante_requerido
+def reclamar(id):
+    f = request.form
+    if avisar(*logica.crear_reclamacion(id, g.usuario, f.get('descripcion'), f.get('lugar_perdida'),
+                                        f.get('fecha_perdida'), f.get('telefono'))):
+        return redirect(url_for('mis_reclamaciones'))
+    return redirect(url_for('detalle', id=id))
+
+
+@app.route('/mis-reclamaciones')
+@estudiante_requerido
+def mis_reclamaciones():
+    return render_template('mis_reclamaciones.html', reclamaciones=bd.listar_reclamaciones(usuario_id=g.usuario['id']))
+
+
+@app.route('/mis-reclamaciones/<int:id>/cancelar', methods=['POST'])
+@estudiante_requerido
+def cancelar_reclamacion(id):
+    avisar(*logica.cancelar_reclamacion(id, g.usuario['id']))
+    return redirect(url_for('mis_reclamaciones'))
+
+
+@app.route('/reclamaciones')
+@encargado_requerido
+def reclamaciones():
+    estado = request.args.get('estado', 'Pendiente') if request.args.get('estado', 'Pendiente') in ESTADOS_RECLAMACION else None
+    return render_template('reclamaciones.html', reclamaciones=bd.listar_reclamaciones(estado), estado_actual=estado,
+                           conteo=bd.contar_reclamaciones())
+
+
+@app.route('/reclamaciones/<int:id>', methods=['POST'])
+@encargado_requerido
+def gestionar_reclamacion(id):
+    avisar(*logica.gestionar_reclamacion(id, request.form.get('accion'), request.form.get('nota'), g.usuario['id']))
+    destino = request.form.get('volver', '')
+    return redirect(destino if destino.startswith('/') and not destino.startswith('//') else url_for('reclamaciones'))
+
+
+# Panel de administración (/admin, credenciales en el .env)
+
+@app.route('/admin', methods=['GET', 'POST'])
+def admin_panel():
+    if g.usuario and not tiene_rol(ROL_ADMIN):
+        flash('Acceso restringido: el panel de administración es solo para el administrador.', 'error')
+        return redirect(url_for('inicio'))
+    env = leer_env()
+    if not g.usuario:
+        if request.method == 'POST':
+            if not logica.admin_configurado(env):
+                flash('Falta configurar ADMIN_USUARIO y ADMIN_CONTRASENA en el archivo .env.', 'error')
+            elif logica.validar_admin(request.form.get('cif', ''), request.form.get('contrasena', ''), env):
+                admin_id = logica.sincronizar_admin(env)
+                session.clear()
+                session.update(usuario_id=admin_id, acceso_admin=True)
+                return redirect(url_for('admin_panel'))
+            else:
+                flash('Credenciales de administrador incorrectas.', 'error')
+        return render_template('admin_login.html', env_listo=logica.admin_configurado(env))
+    por_estado = bd.contar_objetos_por('estado')
+    return render_template('admin_panel.html', por_rol=bd.contar_usuarios_por_rol(), por_estado=por_estado,
+                           total_objetos=sum(por_estado.values()), reclamaciones_pendientes=bd.listar_reclamaciones('Pendiente'),
+                           movimientos=bd.listar_historial(limite=8), fotos=bd.uso_fotos())
+
+
+@app.route('/admin/usuarios', methods=['GET', 'POST'])
+@app.route('/admin/usuarios/<int:id>/editar', methods=['GET', 'POST'])
+@admin_requerido
+def admin_usuarios(id=None):
+    usuario = (bd.buscar_usuario(id) or abort(404)) if id else None
+    if usuario and usuario['rol'] not in ROLES_GESTIONABLES:
+        flash('La cuenta del administrador se configura en el archivo .env.', 'error')
+        return redirect(url_for('admin_usuarios'))
+    f = request.form
+    if request.method == 'POST' and avisar(*logica.guardar_usuario(
+            f.get('nombre'), f.get('cif'), f.get('correo'), f.get('carrera'), f.get('rol'), f.get('contrasena'), id)):
+        return redirect(url_for('admin_usuarios'))
+    if usuario:
+        return render_template('admin_editar_usuario.html', usuario=usuario, datos=f or usuario, roles=ROLES_GESTIONABLES)
+    rol = request.args.get('rol') if request.args.get('rol') in (ROL_ADMIN, *ROLES_GESTIONABLES) else None
+    busqueda = (request.args.get('q') or '').strip()
+    return render_template('admin_usuarios.html', usuarios=bd.listar_usuarios(rol, busqueda), rol_actual=rol,
+                           busqueda=busqueda, roles=ROLES_GESTIONABLES, datos=f)
+
+
+@app.route('/admin/usuarios/<int:id>/estado', methods=['POST'])
+@admin_requerido
+def admin_estado_usuario(id):
+    avisar(*logica.cambiar_activo(id, request.form.get('activo') == '1'))
+    return redirect(url_for('admin_usuarios'))
+
+
+if __name__ == '__main__':
+    app.run(debug=True)

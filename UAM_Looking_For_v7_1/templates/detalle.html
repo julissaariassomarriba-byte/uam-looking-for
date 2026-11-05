@@ -1,0 +1,233 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icono, estado %}
+
+{% block contenido %}
+<div class="titulo-pagina">
+    <h2>Objeto #{{ objeto.id }}</h2>
+    <a href="{{ url_for('inicio') }}" class="enlace-volver">{{ icono('flecha_izq') }} Volver al catálogo</a>
+</div>
+
+<div class="detalle">
+    <section class="panel">
+        {% if objeto.tiene_foto %}
+            <a href="{{ url_for('foto', id=objeto.id) }}" target="_blank" class="foto-detalle" title="Ver la foto en tamaño completo">
+                <img src="{{ url_for('foto', id=objeto.id) }}" alt="Foto de {{ objeto.titulo }}">
+            </a>
+        {% endif %}
+        <div class="detalle-encabezado">
+            <span class="figurita grande">{{ icono(categorias.get(objeto.categoria, 'paquete')) }}</span>
+            <div>
+                <h3>{{ objeto.titulo }}</h3>
+                {{ estado(objeto.estado) }}
+            </div>
+        </div>
+        <dl class="datos">
+            <dt>Categoría</dt><dd>{{ objeto.categoria }}</dd>
+            {% if es_encargado %}
+                <dt>Descripción interna</dt><dd>{{ objeto.descripcion }}</dd>
+                <dt>Descripción pública</dt><dd>{{ objeto.descripcion_publica or '—' }}</dd>
+                <dt>Se guarda en</dt><dd>{{ objeto.ubicacion or 'Sin asignar' }}</dd>
+                <dt>Encontrado en</dt><dd>{{ objeto.lugar_encontrado }}</dd>
+                <dt>Fecha y hora</dt><dd>{{ objeto.fecha }}{{ ' · ' ~ objeto.hora if objeto.hora }}</dd>
+                <dt>Lo trajo</dt><dd>{% if objeto.reportado_nombre %}{{ objeto.reportado_nombre }}{{ ' · ' ~ objeto.reportado_tipo if objeto.reportado_tipo }}
+                    {%- if objeto.reportado_cif %} · CIF {{ objeto.reportado_cif }}{% endif %}
+                    {%- if objeto.reportado_telefono %} · tel. {{ objeto.reportado_telefono }}{% endif %}
+                    {%- if objeto.reportado_correo %} · {{ objeto.reportado_correo }}{% endif %}
+                    {% else %}Lo encontró el personal{% endif %}</dd>
+            {% else %}
+                <dt>Descripción</dt><dd>{{ objeto.descripcion_publica or 'Las señas se confirman con el encargado.' }}</dd>
+                <dt>Reportado en</dt><dd>{{ objeto.periodo|mes }}</dd>
+                {% if objeto.estado in estados_manuales %}<dt>Dónde preguntar</dt><dd>{{ objeto.ubicacion or 'Con el encargado de objetos perdidos' }}</dd>{% endif %}
+            {% endif %}
+        </dl>
+        <p class="nota-privada">{{ icono('privado') }}
+            {% if es_encargado %}La descripción interna, el lugar del hallazgo, la fecha, la hora, quién lo trajo y los datos de retiro solo los ve el personal.
+            {% else %}El lugar, la fecha y la hora exactas del hallazgo son privados: sirven para verificar al dueño.{% endif %}
+        </p>
+
+        {% if es_encargado %}
+            <h4>Historial</h4>
+            <ul class="linea-tiempo">
+                {% for m in movimientos %}
+                    <li>
+                        <span class="texto-suave">{{ m.fecha_hora }}</span>
+                        <strong>{{ m.accion }}</strong>{{ ' → ' ~ m.estado_nuevo if m.estado_nuevo }}
+                        <span class="texto-suave">por {{ m.usuario_nombre }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </section>
+
+    <section class="panel">
+    {% if es_encargado %}
+        {% if entrega %}
+            <h4>{{ icono('mano') }} {{ {'Entregado': 'Entregado a', 'Por recuperar': 'Lo tiene'}.get(objeto.estado, 'Se entregó primero a') }}</h4>
+            <dl class="mini-datos tarjeta-retiro{{ ' tarjeta-recuperar' if objeto.estado == 'Por recuperar' }}">
+                <dt>Nombre</dt><dd>{{ entrega.nombre }}{{ ' · ' ~ entrega.tipo if entrega.tipo }}</dd>
+                <dt>CIF</dt><dd>{{ entrega.cif }}</dd>
+                <dt>Teléfono</dt><dd><a href="tel:{{ (entrega.telefono or '')|replace(' ', '') }}">{{ entrega.telefono }}</a></dd>
+                <dt>Señas que dio</dt><dd>{{ entrega.senas }}</dd>
+                <dt>Fecha</dt><dd>{{ entrega.fecha_entrega }} · por {{ entrega.entregado_por_nombre }}</dd>
+            </dl>
+        {% endif %}
+        {% if objeto.estado == 'Entregado' %}
+            <p class="texto-suave ayuda-form">Si alguien demuestra que el objeto era suyo, acepta su reclamación para recuperarlo.</p>
+        {% elif objeto.estado == 'Por recuperar' %}
+            <h4>{{ icono('historial') }} Por recuperar</h4>
+            <p class="texto-suave ayuda-form">Se aceptó la reclamación de <strong>{{ aceptada.usuario_nombre }}</strong>. Contacta a
+               {{ entrega.nombre }} y, cuando te devuelva el objeto, regístralo como recuperado.</p>
+            <form method="POST" class="form-compacto">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="accion" value="recuperado">
+                <input type="text" name="observaciones" aria-label="Observaciones" placeholder="Observaciones (opcional): cómo llegó, en qué estado…">
+                <button type="submit" class="btn btn-aprobar btn-bloque">{{ icono('check') }} Registrar recuperación</button>
+            </form>
+        {% elif objeto.estado in ('Recuperado', 'Devuelto') %}
+            <h4>{{ icono('bandeja' if objeto.estado == 'Recuperado' else 'check') }} {{ 'Devolver a su dueño' if objeto.estado == 'Recuperado' else 'Devuelto a su dueño' }}</h4>
+            <dl class="mini-datos tarjeta-retiro">
+                <dt>Dueño</dt><dd>{{ aceptada.usuario_nombre }} · CIF {{ aceptada.usuario_cif }}</dd>
+                <dt>Contacto</dt><dd>{{ aceptada.usuario_correo }}{{ ' · ' ~ aceptada.usuario_telefono if aceptada.usuario_telefono }}</dd>
+                <dt>Recuperado</dt><dd>{{ aceptada.fecha_recepcion }} · por {{ aceptada.recibido_por_nombre }}</dd>
+                {% if aceptada.fecha_devolucion %}<dt>Devuelto</dt><dd>{{ aceptada.fecha_devolucion }} · por {{ aceptada.devuelto_por_nombre }}</dd>{% endif %}
+                {% if aceptada.observaciones %}<dt>Observaciones</dt><dd>{{ aceptada.observaciones }}</dd>{% endif %}
+            </dl>
+            {% if objeto.estado == 'Recuperado' %}
+                <form method="POST" class="form-compacto">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="accion" value="devolver">
+                    <input type="text" name="observaciones" aria-label="Observaciones" placeholder="Observaciones (opcional)">
+                    <label class="casilla">
+                        <input type="checkbox" name="confirmado" value="1" required>
+                        Revisé el carné de {{ aceptada.usuario_nombre }}.
+                    </label>
+                    <button type="submit" class="btn btn-aprobar btn-bloque">{{ icono('check') }} Confirmar devolución</button>
+                </form>
+            {% endif %}
+        {% else %}
+            <h4>{{ icono('mano') }} Registrar entrega</h4>
+            <p class="texto-suave ayuda-form">Pide el carné a quien lo retira y que describa el objeto antes de entregarlo.</p>
+            <form method="POST" action="{{ url_for('entregar', id=objeto.id) }}" class="form-compacto form-entrega">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="campos-dobles">
+                    <div>
+                        <label for="nombre">Nombre completo *</label>
+                        <input type="text" id="nombre" name="nombre" value="{{ datos_entrega.get('nombre', '') }}" required minlength="3">
+                    </div>
+                    <div>
+                        <label for="cif">CIF / cédula *</label>
+                        <input type="text" id="cif" name="cif" value="{{ datos_entrega.get('cif', '') }}" required minlength="4">
+                    </div>
+                </div>
+                <label for="tipo">Tipo de persona *</label>
+                <select id="tipo" name="tipo" required>
+                    <option value="">Elige…</option>
+                    {% for t in tipos_persona %}<option value="{{ t }}" {{ 'selected' if datos_entrega.get('tipo') == t }}>{{ 'Personal administrativo' if t == 'Administrativo' else t }}</option>{% endfor %}
+                </select>
+                <label for="telefono">Teléfono *</label>
+                <input type="tel" id="telefono" name="telefono" value="{{ datos_entrega.get('telefono', '') }}" required placeholder="Ej. 8888 8888">
+                <label for="senas">Señas que dio la persona *</label>
+                <textarea id="senas" name="senas" rows="3" required minlength="10"
+                          placeholder="Lo que describió: marca, color, contenido…">{{ datos_entrega.get('senas', '') }}</textarea>
+                <label class="casilla">
+                    <input type="checkbox" name="confirmado" value="1" required>
+                    Revisé su carné y las señas coinciden con el registro privado.
+                </label>
+                <button type="submit" class="btn btn-aprobar btn-bloque">{{ icono('check') }} Confirmar entrega</button>
+            </form>
+
+            <h4>Estado</h4>
+            <form method="POST" class="fila-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <select name="estado" aria-label="Nuevo estado">
+                    {% for e in estados_manuales %}<option value="{{ e }}" {{ 'selected' if objeto.estado == e }}>{{ e }}</option>{% endfor %}
+                </select>
+                <button type="submit" class="btn">Guardar</button>
+            </form>
+        {% endif %}
+
+        <h4>{{ icono('ubicacion') }} Ubicación</h4>
+        <form method="POST" class="fila-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="accion" value="ubicacion">
+            <select name="ubicacion" aria-label="Dónde se guarda">
+                {% if not objeto.ubicacion %}<option value="">Sin asignar</option>{% endif %}
+                {% for u in ubicaciones %}<option {{ 'selected' if objeto.ubicacion == u }}>{{ u }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn">Mover</button>
+        </form>
+
+        <h4>Foto</h4>
+        <form method="POST" enctype="multipart/form-data" class="form-compacto subir-foto">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="accion" value="foto">
+            <input type="file" name="foto" accept="image/*" aria-label="Elegir foto" data-foto data-vista="vista-foto" data-info="info-foto">
+            <p class="texto-suave" id="info-foto">{{ 'Elige otra para reemplazarla.' if objeto.tiene_foto else 'Este objeto aún no tiene foto.' }} Se reduce sola antes de enviarse.</p>
+            <img id="vista-foto" class="vista-foto" alt="Vista previa de la foto" hidden>
+            <label class="casilla">
+                <input type="checkbox" name="foto_publica" value="1" {{ 'checked' if objeto.foto_publica }}>
+                Mostrar la foto a los estudiantes
+            </label>
+            <button type="submit" class="btn btn-secundario">Guardar foto</button>
+        </form>
+
+        <h4>Descripción pública</h4>
+        <form method="POST" class="form-compacto">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="accion" value="descripcion_publica">
+            <textarea name="descripcion_publica" rows="2" aria-label="Descripción pública"
+                      placeholder="Ej. Mochila de color rojo. Sin lugar, fecha ni señas únicas.">{{ objeto.descripcion_publica or '' }}</textarea>
+            <button type="submit" class="btn btn-secundario">Guardar descripción</button>
+        </form>
+
+        {% if reclamaciones %}
+            <h4>Reclamaciones</h4>
+            {% for r in reclamaciones %}
+                {% with en_detalle = true %}{% include 'reclamo.html' %}{% endwith %}
+            {% endfor %}
+        {% endif %}
+
+    {% elif objeto.estado == 'Entregado' %}
+        <h4>{{ icono('mano') }} ¿Era tuyo?</h4>
+        {% if lo_retire_yo %}
+            <p>Tú retiraste este objeto.</p>
+        {% elif mi_reclamacion %}
+            <p><span class="badge reclamacion-pendiente">Pendiente</span></p>
+            <p>Tu reclamación está en revisión. Síguela en <a href="{{ url_for('mis_reclamaciones') }}">Mis reclamaciones</a>.</p>
+        {% else %}
+            <p class="texto-suave">Este objeto ya se entregó a otra persona. Si era tuyo, descríbelo: el encargado comparará tus señas
+               con el registro y, si tienes razón, lo recuperará para entregártelo.</p>
+            <form method="POST" action="{{ url_for('reclamar', id=objeto.id) }}" class="form-compacto">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label for="descripcion">Señas del objeto *</label>
+                <textarea id="descripcion" name="descripcion" rows="4" minlength="15" required
+                          placeholder="Color, marca, contenido, fundas, stickers… lo que solo el dueño sabría."></textarea>
+                <div class="campos-dobles">
+                    <div>
+                        <label for="lugar_perdida">¿Dónde lo perdiste?</label>
+                        <input type="text" id="lugar_perdida" name="lugar_perdida" placeholder="Ej. Edificio C">
+                    </div>
+                    <div>
+                        <label for="fecha_perdida">¿Cuándo?</label>
+                        <input type="date" id="fecha_perdida" name="fecha_perdida">
+                    </div>
+                </div>
+                <label for="telefono">Teléfono (opcional)</label>
+                <input type="tel" id="telefono" name="telefono" placeholder="Ej. 8888 8888">
+                <button type="submit" class="btn btn-bloque">Reclamar objeto</button>
+            </form>
+        {% endif %}
+    {% elif objeto.estado not in estados_manuales %}
+        <h4>{{ icono('mano') }} ¿Era tuyo?</h4>
+        <p>Ya se comprobó quién es el dueño de este objeto. Si enviaste una reclamación, síguela en
+           <a href="{{ url_for('mis_reclamaciones') }}">Mis reclamaciones</a>.</p>
+    {% else %}
+        <h4>{{ icono('mano') }} ¿Es tuyo?</h4>
+        <p>Acércate al encargado de objetos perdidos con tu carné. Para entregártelo te pedirá tu <strong>nombre, CIF y teléfono</strong>
+           y que describas el objeto.</p>
+    {% endif %}
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}{% if es_encargado %}{% include 'foto_script.html' %}{% endif %}{% endblock %}

@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icono %}
+
+{% block contenido %}
+<div class="titulo-pagina">
+    <h2>Administración de cuentas</h2>
+    <span class="texto-suave">{{ usuarios|length }} cuenta(s)</span>
+</div>
+
+<div class="admin-cuentas">
+    <section class="panel formulario-lateral">
+        <h3>{{ icono('mas') }} Registrar cuenta</h3>
+        <form method="POST" action="{{ url_for('admin_usuarios') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div>
+                <label for="nombre">Nombre completo</label>
+                <input type="text" id="nombre" name="nombre" value="{{ datos.get('nombre', '') }}" required>
+            </div>
+            <div>
+                <label for="cif">CIF / cédula (usuario)</label>
+                <input type="text" id="cif" name="cif" value="{{ datos.get('cif', '') }}" required minlength="4">
+            </div>
+            <div>
+                <label for="correo">Correo institucional</label>
+                <input type="email" id="correo" name="correo" value="{{ datos.get('correo', '') }}" required>
+            </div>
+            <div>
+                <label for="carrera">Carrera / Departamento</label>
+                <input type="text" id="carrera" name="carrera" value="{{ datos.get('carrera', '') }}">
+            </div>
+            <div>
+                <label for="rol">Rol</label>
+                <select id="rol" name="rol" required>
+                    {% for r in roles %}<option value="{{ r }}" {{ 'selected' if datos.get('rol') == r }}>{{ r }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="contrasena">Contraseña inicial</label>
+                <input type="password" id="contrasena" name="contrasena" required minlength="6" autocomplete="new-password">
+            </div>
+            <button type="submit" class="btn btn-bloque">Crear cuenta</button>
+        </form>
+    </section>
+
+    <section>
+        <form method="GET" class="barra-filtros">
+            <input type="search" name="q" value="{{ busqueda }}" placeholder="Buscar por nombre, CIF o correo" aria-label="Buscar">
+            <select name="rol" aria-label="Filtrar por rol">
+                <option value="">Todos los roles</option>
+                {% for r in ['Administrador'] + roles|list %}<option value="{{ r }}" {{ 'selected' if rol_actual == r }}>{{ r }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn">{{ icono('lupa') }} Filtrar</button>
+        </form>
+
+        <div class="panel tabla-contenedor">
+            <table class="tabla tabla-responsiva">
+                <thead>
+                    <tr><th>Nombre</th><th>CIF</th><th>Correo</th><th>Carrera</th><th>Rol</th><th>Estado</th><th>Acciones</th></tr>
+                </thead>
+                <tbody>
+                    {% for u in usuarios %}
+                    <tr class="{{ 'fila-inactiva' if not u.activo }}">
+                        <td data-label="Nombre">{{ u.nombre }}</td>
+                        <td data-label="CIF">{{ u.cif }}</td>
+                        <td data-label="Correo">{{ u.correo }}</td>
+                        <td data-label="Carrera">{{ u.carrera or '—' }}</td>
+                        <td data-label="Rol"><span class="rol-chip rol-{{ u.rol|lower }}">{{ u.rol }}</span></td>
+                        <td data-label="Estado"><span class="badge {{ 'estado-activo' if u.activo else 'estado-inactivo' }}">{{ 'Activa' if u.activo else 'Desactivada' }}</span></td>
+                        <td data-label="Acciones" class="celda-acciones">
+                            {% if u.rol in roles %}
+                                <div class="acciones-celda">
+                                <a href="{{ url_for('admin_usuarios', id=u.id) }}" class="btn btn-mini btn-claro">{{ icono('editar') }} Editar</a>
+                                <form method="POST" action="{{ url_for('admin_estado_usuario', id=u.id) }}" class="form-en-linea">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="activo" value="{{ '0' if u.activo else '1' }}">
+                                    <button type="submit" class="btn btn-mini {{ 'btn-rechazar' if u.activo else 'btn-aprobar' }}">{{ 'Desactivar' if u.activo else 'Reactivar' }}</button>
+                                </form>
+                                </div>
+                            {% else %}
+                                <span class="texto-suave">Cuenta protegida</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7">No se encontraron cuentas.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

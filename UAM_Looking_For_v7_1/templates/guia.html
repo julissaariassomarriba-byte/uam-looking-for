@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icono, estado %}
+
+{% block titulo %}Guía rápida | UAM Looking For{% endblock %}
+
+{% block contenido %}
+<div class="titulo-pagina">
+    <h2>Guía rápida</h2>
+    <a href="{{ url_for('inicio') }}" class="enlace-volver">{{ icono('flecha_izq') }} Volver al catálogo</a>
+</div>
+
+<div class="guia">
+    <section class="panel guia-bloque">
+        <h3>{{ icono('lupa') }} Perdí algo</h3>
+        <ol class="pasos">
+            <li><strong>Búscalo</strong> en el <a href="{{ url_for('inicio') }}">catálogo</a>.</li>
+            <li><strong>Ve con el encargado</strong> y lleva tu carné.</li>
+            <li><strong>Da tu nombre, CIF y teléfono</strong> y describe el objeto.</li>
+            <li><strong>Retíralo.</strong> Tus datos quedan registrados en la entrega.</li>
+        </ol>
+    </section>
+
+    <section class="panel guia-bloque">
+        <h3>{{ icono('bandeja') }} Alguien se llevó lo mío</h3>
+        <p>Si tu objeto aparece como «Entregado», ábrelo y usa <strong>«¿Era tuyo?»</strong>. Si el encargado comprueba que era tuyo,
+           lo recupera de quien lo retiró y te avisa para que lo retires con tu carné. Sigue el avance en <a href="{{ url_for('mis_reclamaciones') }}">Mis reclamaciones</a>.</p>
+    </section>
+
+    <section class="panel guia-bloque">
+        <h3>{{ icono('info') }} Estados</h3>
+        <ul class="estados-guia">
+            <li>{{ estado('Activo') }} Recién reportado.</li>
+            <li>{{ estado('En resguardo') }} Guardado, listo para retirar.</li>
+            <li>{{ estado('En bodega') }} Sin reclamar por un tiempo.</li>
+            <li>{{ estado('Entregado') }} Ya lo retiró alguien.</li>
+            <li>{{ estado('Por recuperar') }} Se comprobó quién es el dueño; el encargado lo está recuperando.</li>
+            <li>{{ estado('Recuperado') }} Ya volvió al encargado y espera a su dueño.</li>
+            <li>{{ estado('Devuelto') }} Su dueño ya lo recibió.</li>
+        </ul>
+    </section>
+
+    <section class="panel guia-bloque">
+        <h3>{{ icono('privado') }} ¿Por qué no veo dónde se encontró?</h3>
+        <p>Para evitar que alguien se lleve lo que no es suyo. El encargado compara las señas con el registro privado.</p>
+        <p class="texto-suave">¿Encontraste algo? Entrégalo al encargado para que lo registre.</p>
+    </section>
+</div>
+
+<p class="texto-suave guia-ayuda">{{ icono('info') }} ¿Dudas? Acércate al encargado de objetos perdidos con tu carné.</p>
+{% endblock %}

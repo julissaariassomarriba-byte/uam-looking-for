@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icono %}
+
+{% block titulo %}Panel de administración | UAM Looking For{% endblock %}
+
+{% block contenido %}
+<div class="titulo-pagina">
+    <h2>Panel de administración</h2>
+    <a href="{{ url_for('admin_usuarios') }}" class="btn">{{ icono('usuarios') }} Gestionar cuentas</a>
+</div>
+
+<div class="resumen-estados tres">
+    {% for rol, ic, plural in [('Estudiante', 'birrete', 'Estudiantes'), ('Encargado', 'escudo', 'Encargados')] %}
+        {% set datos = por_rol.get(rol, {'total': 0, 'activos': 0}) %}
+        <a href="{{ url_for('admin_usuarios', rol=rol) }}" class="panel resumen-tarjeta tarjeta-enlace rol-borde-{{ rol|lower }}">
+            {{ icono(ic) }}
+            <div>
+                <span class="resumen-numero">{{ datos.total }}</span>
+                <span class="texto-suave">{{ plural }} · {{ datos.activos }} activa(s)</span>
+            </div>
+        </a>
+    {% endfor %}
+    <a href="{{ url_for('inicio') }}" class="panel resumen-tarjeta tarjeta-enlace rol-borde-objetos">
+        {{ icono('paquete') }}
+        <div>
+            <span class="resumen-numero">{{ total_objetos }}</span>
+            <span class="texto-suave">Objetos · {{ por_estado.get('Entregado', 0) }} entregado(s) · {{ fotos.total }} foto(s), {{ (fotos.peso / 1048576)|round(1) }} MB</span>
+        </div>
+    </a>
+</div>
+
+<div class="panel-columnas">
+    <section>
+        <h3 class="subtitulo">Reclamaciones pendientes ({{ reclamaciones_pendientes|length }})</h3>
+        <div class="panel lista-simple">
+            {% for r in reclamaciones_pendientes[:6] %}
+                <a href="{{ url_for('reclamaciones') }}" class="fila-simple">
+                    <span class="celda-icono">{{ icono(categorias.get(r.categoria, 'paquete')) }} #{{ r.objeto_id }} {{ r.titulo }}</span>
+                    <span class="texto-suave">{{ r.usuario_nombre }} · {{ r.fecha_solicitud }}</span>
+                </a>
+            {% else %}
+                <p class="texto-suave fila-simple">No hay solicitudes pendientes.</p>
+            {% endfor %}
+        </div>
+    </section>
+    <section>
+        <h3 class="subtitulo">Actividad reciente</h3>
+        <div class="panel lista-simple">
+            {% for m in movimientos %}
+                <div class="fila-simple">
+                    <span><strong>{{ m.accion }}</strong>{{ ' → ' ~ m.estado_nuevo if m.estado_nuevo }} · #{{ m.objeto_id }} {{ m.titulo }}</span>
+                    <span class="texto-suave">{{ m.fecha_hora }} · {{ m.usuario_nombre }}</span>
+                </div>
+            {% else %}
+                <p class="texto-suave fila-simple">Aún no hay movimientos.</p>
+            {% endfor %}
+            {% if movimientos %}<a href="{{ url_for('historial') }}" class="fila-simple enlace-vertodo">Ver historial completo →</a>{% endif %}
+        </div>
+    </section>
+</div>
+{% endblock %}
