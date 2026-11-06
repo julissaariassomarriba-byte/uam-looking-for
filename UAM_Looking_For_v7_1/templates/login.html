@@ -48,8 +48,11 @@
             <div class="campo">{{ icono('candado') }}<input type="password" name="contrasena" placeholder="Contraseña" aria-label="Contraseña" required autocomplete="current-password"><button type="button" class="ver-clave" aria-label="Mostrar contraseña">{{ icono('ojo') }}</button></div>
             <button type="submit" class="btn btn-bloque">Acceder</button>
         </form>
-        <p class="acceso-cambio">¿Eres estudiante y no tienes cuenta?</p>
-        <a href="{{ url_for('registro') }}" class="btn btn-claro btn-bloque">{{ icono('birrete') }} Crear cuenta de estudiante</a>
+        <p class="acceso-separador"><span>¿No tienes cuenta?</span></p>
+        <div class="acceso-opciones">
+            <a href="{{ url_for('registro') }}" class="btn btn-claro" title="Para estudiantes de la UAM">{{ icono('birrete') }} Crear cuenta</a>
+            <a href="{{ url_for('visitante') }}" class="btn btn-claro" title="Perdiste algo y no estudias en la UAM">{{ icono('usuario') }} Soy visitante</a>
+        </div>
         {% endif %}
 
         <div class="acceso-ayuda">
@@ -58,6 +61,7 @@
                 <li>Verifica que estés digitando correctamente tu usuario (CIF) y contraseña.</li>
                 <li>Si olvidaste tu contraseña, comunícate con la oficina de Vida Estudiantil.</li>
                 <li>Los estudiantes pueden crear su cuenta aquí. Las cuentas de encargados las crea el administrador.</li>
+                <li>Si visitas la universidad y perdiste algo, usa «Soy visitante»: no necesitas cuenta.</li>
             </ul>
         </div>
 
