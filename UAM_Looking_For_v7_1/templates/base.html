@@ -29,6 +29,8 @@
                 <a href="{{ url_for('reportar') }}">{{ icono('mas') }} Recibir objeto</a>
                 <a href="{{ url_for('reclamaciones') }}">{{ icono('bandeja') }} Reclamaciones
                     {%- if pendientes %} <span class="nav-contador">{{ pendientes }}</span>{% endif %}</a>
+                <a href="{{ url_for('reportes_visitantes') }}" title="Reportes de visitantes">{{ icono('usuario') }} Visitantes
+                    {%- if reportes_nuevos %} <span class="nav-contador" title="Reportes pendientes">{{ reportes_nuevos }}</span>{% endif %}</a>
                 <a href="{{ url_for('historial') }}">{{ icono('historial') }} Historial</a>
             {% else %}
                 <a href="{{ url_for('mis_reclamaciones') }}">{{ icono('mano') }} Mis reclamaciones

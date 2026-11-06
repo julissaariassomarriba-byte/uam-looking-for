@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% from 'macros.html' import icono, estado %}
+{% from 'macros.html' import icono, estado, zona_foto %}
 
 {% block contenido %}
 <div class="titulo-pagina">
@@ -161,9 +161,7 @@
         <form method="POST" enctype="multipart/form-data" class="form-compacto subir-foto">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="accion" value="foto">
-            <input type="file" name="foto" accept="image/*" aria-label="Elegir foto" data-foto data-vista="vista-foto" data-info="info-foto">
-            <p class="texto-suave" id="info-foto">{{ 'Elige otra para reemplazarla.' if objeto.tiene_foto else 'Este objeto aún no tiene foto.' }} Se reduce sola antes de enviarse.</p>
-            <img id="vista-foto" class="vista-foto" alt="Vista previa de la foto" hidden>
+            {{ zona_foto(('Elige otra para reemplazarla.' if objeto.tiene_foto else 'Este objeto aún no tiene foto.') ~ ' Se reduce sola antes de enviarse.') }}
             <label class="casilla">
                 <input type="checkbox" name="foto_publica" value="1" {{ 'checked' if objeto.foto_publica }}>
                 Mostrar la foto a los estudiantes

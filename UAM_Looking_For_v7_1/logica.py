@@ -3,14 +3,19 @@
 Python revisa lo que depende de quién está conectado y da mensajes claros; la base (schema.sql) vuelve a revisar
 cada regla con CHECK y triggers, así que aunque alguien se salte la app no se guarda nada incoherente.
 """
+import datetime
 import hashlib
 import hmac
+import re
 import secrets
 import sqlite3
+import urllib.parse
 
 import base_datos as bd
 import imagenes
-from config import CATEGORIAS, ESTADOS_MANUALES, MESES, ROL_ADMIN, ROLES_GESTIONABLES, TIPOS_PERSONA, UBICACIONES
+import notificaciones
+from config import (CATEGORIAS, CODIGO_PAIS, ESTADOS_MANUALES, ESTADOS_REPORTE, MESES, ROL_ADMIN, ROLES_GESTIONABLES,
+                    TIPOS_PERSONA, UBICACIONES, leer_env)
 
 
 def texto(valor):
@@ -368,3 +373,185 @@ def devolver_al_dueno(objeto_id, confirmado, observaciones, encargado_id):
         bd.completar_devolucion(con, r['devolucion_id'], encargado_id, texto(observaciones) or None)
         return True, f'Objeto devuelto a {r["usuario_nombre"]}.'
     return en_transaccion(guardar)
+
+
+# Reportes de visitantes (v8.5): un visitante, sin cuenta, reporta un objeto que perdió y sigue su estado.
+
+ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'   # sin I, O, 0 ni 1, que se confunden al copiarlos
+LARGOS = {'nombre': 100, 'telefono': 30, 'correo': 120, 'objeto_nombre': 100, 'descripcion': 1000, 'lugar_perdida': 150}
+
+
+def digitos(valor):
+    return re.sub(r'\D', '', valor or '')
+
+
+def nuevo_codigo():
+    letras = ''.join(secrets.choice(ALFABETO_CODIGO) for _ in range(8))
+    return f'UAM-{letras[:4]}-{letras[4:]}'
+
+
+def hash_token(token):
+    return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+
+def fecha_valida(valor):
+    try:
+        return bool(re.fullmatch(r'\d{4}-\d{2}-\d{2}', valor or '')) and bool(datetime.date.fromisoformat(valor))
+    except ValueError:
+        return False
+
+
+# Guarda el reporte con su foto obligatoria. Devuelve (True, {id, codigo, token}) o (False, mensaje).
+# El token del enlace privado solo lo recibe el visitante: en la base queda su hash.
+def registrar_reporte_visitante(datos, archivo):
+    d = {campo: texto(datos.get(campo)) for campo in LARGOS}
+    d['correo'] = d['correo'].lower() or None
+    d['categoria'] = datos.get('categoria')
+    d['fecha_perdida'] = texto(datos.get('fecha_perdida'))
+    errores = [(len(d['nombre']) < 3, 'Escribe tu nombre completo.'),
+               (len(digitos(d['telefono'])) < 8, 'Escribe un número de teléfono válido (al menos 8 dígitos) para poder contactarte.'),
+               (d['correo'] and not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', d['correo']), 'El correo no es válido (o déjalo vacío).'),
+               (len(d['objeto_nombre']) < 3, 'Escribe qué objeto perdiste.'),
+               (d['categoria'] not in CATEGORIAS, 'Elige la categoría del objeto.'),
+               (len(d['descripcion']) < 15, 'Describe el objeto con más detalle (al menos 15 caracteres): color, marca, contenido…'),
+               (len(d['lugar_perdida']) < 3, 'Escribe dónde lo perdiste dentro de la universidad.'),
+               (not fecha_valida(d['fecha_perdida']), 'Escribe la fecha en que lo perdiste.'),
+               (fecha_valida(d['fecha_perdida']) and d['fecha_perdida'] > bd.ahora()[:10], 'La fecha de pérdida no puede ser futura.')]
+    errores += [(len(d[c] or '') > maximo, f'El campo «{c.replace("_", " ")}» es demasiado largo (máximo {maximo} caracteres).')
+                for c, maximo in LARGOS.items()]
+    for hay_error, mensaje in errores:
+        if hay_error:
+            return False, mensaje
+    ok, foto = imagenes.revisar(archivo)
+    if not ok:
+        return False, foto
+    if not foto:
+        return False, 'La fotografía del objeto es obligatoria: ayuda al encargado a reconocerlo.'
+    token = secrets.token_urlsafe(32)
+    d.update(foto=foto, token_hash=hash_token(token))
+    for _ in range(5):   # el código es al azar: si por casualidad ya existe, se genera otro
+        d['codigo'] = nuevo_codigo()
+        try:
+            with bd.conectar() as con:
+                return True, {'id': bd.insertar_reporte_visitante(con, d), 'codigo': d['codigo'], 'token': token}
+        except sqlite3.IntegrityError as error:
+            if 'reportes_visitantes.codigo' not in str(error):
+                return False, 'La base de datos rechazó el reporte: revisa el formulario.'
+    return False, 'No se pudo generar un código para el reporte. Inténtalo de nuevo.'
+
+
+# Avisa al encargado por WhatsApp y guarda el resultado REAL. Nunca hace fallar el reporte: ya está guardado.
+def notificar_reporte(id, enlace):
+    reporte = bd.buscar_reporte_visitante(id)
+    try:
+        estado, detalle = notificaciones.enviar(leer_env(), reporte, enlace)
+    except Exception as error:   # un fallo inesperado del aviso no debe perder ni bloquear el reporte
+        estado, detalle = 'Fallida', f'Error inesperado al avisar: {type(error).__name__}'
+    bd.anotar_whatsapp(id, estado, (detalle or 'Sin detalle')[:300])
+    return estado, detalle
+
+
+def reintentar_whatsapp(id, enlace):
+    reporte = bd.buscar_reporte_visitante(id)
+    if not reporte:
+        return False, 'El reporte no existe.'
+    if reporte['whatsapp_estado'] == 'Enviada':
+        return False, 'El aviso de este reporte ya se envió por WhatsApp.'
+    estado, detalle = notificar_reporte(id, enlace)
+    if estado == 'Enviada':
+        return True, 'Aviso enviado por WhatsApp.'
+    return False, f'No se pudo enviar por WhatsApp ({estado}): {detalle}'
+
+
+# Lo único que ve el visitante: sin teléfono, correo, descripción ni observaciones internas.
+def vista_publica(r):
+    return {'codigo': r['codigo'], 'objeto_nombre': r['objeto_nombre'], 'categoria': r['categoria'], 'estado': r['estado'],
+            'fecha_perdida': r['fecha_perdida'], 'fecha_registro': r['fecha_registro'],
+            'fecha_actualizacion': r['fecha_actualizacion'], 'nombre': r['nombre'].split()[0],
+            'retiro': r['objeto_ubicacion'] if r['estado'] == 'Localizado' and r['objeto_id'] else None}
+
+
+# Seguimiento con el enlace privado (el token se compara por su hash).
+def seguimiento(token):
+    if not token or len(token) > 100:
+        return None
+    reporte = bd.buscar_reporte_por_token(hash_token(token))
+    return vista_publica(reporte) if reporte else None
+
+
+def mismo_telefono(guardado, escrito):
+    a, b = digitos(guardado), digitos(escrito)
+    if len(a) < 8 or len(b) < 8:
+        return False
+    return hmac.compare_digest(a[-8:], b[-8:])   # acepta el número con o sin código de país
+
+
+# Consulta con código + teléfono: el código solo (aunque se adivinara) no basta para ver un reporte.
+def consultar_reporte(codigo, telefono):
+    codigo = re.sub(r'[^A-Z0-9-]', '', texto(codigo).upper())
+    if not re.fullmatch(r'UAM-[A-Z0-9]{4}-[A-Z0-9]{4}', codigo):
+        return None
+    reporte = bd.buscar_reporte_por_codigo(codigo)
+    return vista_publica(reporte) if reporte and mismo_telefono(reporte['telefono'], telefono) else None
+
+
+def gestionar_reporte_visitante(id, estado, observaciones, usuario_id):
+    observaciones = texto(observaciones) or None
+    if estado not in ESTADOS_REPORTE:
+        return False, 'Elige un estado válido.'
+    if observaciones and len(observaciones) > 2000:
+        return False, 'Las observaciones son demasiado largas (máximo 2000 caracteres).'
+
+    def guardar(con):
+        r = bd.buscar_reporte_visitante(id, con)
+        if not r:
+            return False, 'El reporte no existe.'
+        if (estado, observaciones) == (r['estado'], r['observaciones']):
+            return False, 'No hubo cambios.'
+        bd.gestionar_reporte_visitante(con, id, estado, observaciones, r['objeto_id'], usuario_id)
+        return True, f'Reporte {r["codigo"]} actualizado.'
+    return en_transaccion(guardar)
+
+
+# Relaciona el reporte con un objeto encontrado (o quita la relación si objeto_id viene vacío).
+def relacionar_objeto(id, objeto_id, usuario_id):
+    objeto_id = texto(objeto_id)
+    if objeto_id and not objeto_id.isdigit():
+        return False, 'Elige un objeto válido.'
+    objeto_id = int(objeto_id) if objeto_id else None
+
+    def guardar(con):
+        r = bd.buscar_reporte_visitante(id, con)
+        if not r:
+            return False, 'El reporte no existe.'
+        if objeto_id == r['objeto_id']:
+            return False, 'No hubo cambios.'
+        if objeto_id and not bd.buscar_objeto(objeto_id, con=con):
+            return False, 'El objeto no existe.'
+        bd.gestionar_reporte_visitante(con, id, r['estado'], r['observaciones'], objeto_id, usuario_id)
+        return True, f'Reporte relacionado con el objeto #{objeto_id}.' if objeto_id else 'Se quitó la relación con el objeto.'
+    return en_transaccion(guardar)
+
+
+# Coincidencias probables: misma categoría, bajo custodia, encontrados desde el día de la pérdida; primero los
+# que comparten más palabras con lo que describió el visitante.
+def posibles_coincidencias(reporte, limite=5):
+    palabras = lambda t: {p for p in re.findall(r'\w+', (t or '').lower()) if len(p) > 3}
+    buscadas = palabras(f"{reporte['objeto_nombre']} {reporte['descripcion']}")
+    candidatos = bd.objetos_candidatos(reporte['categoria'], reporte['fecha_perdida'])
+    puntaje = lambda o: len(buscadas & palabras(f"{o['titulo']} {o['descripcion']} {o['descripcion_publica']}"))
+    return sorted(candidatos, key=lambda o: (-puntaje(o), o['fecha'], o['id']))[:limite]
+
+
+# Enlaces para contactar al visitante desde el panel (llamar, WhatsApp desde el teléfono del encargado, correo).
+def enlaces_contacto(reporte):
+    numero = digitos(reporte['telefono'])
+    internacional = CODIGO_PAIS + numero if len(numero) == 8 else numero
+    saludo = (f"Hola {reporte['nombre'].split()[0]}, te escribimos de objetos perdidos de la UAM por tu reporte "
+              f"{reporte['codigo']} ({reporte['objeto_nombre']}).")
+    enlaces = {'llamar': f'tel:+{internacional}', 'whatsapp': f'https://wa.me/{internacional}?text={urllib.parse.quote(saludo)}'}
+    if reporte['correo']:
+        enlaces['correo'] = (f"mailto:{reporte['correo']}?subject={urllib.parse.quote('Tu reporte ' + reporte['codigo'])}"
+                             f"&body={urllib.parse.quote(saludo)}")
+    return enlaces
+

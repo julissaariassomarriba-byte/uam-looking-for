@@ -32,13 +32,22 @@
     }
 
     document.querySelectorAll('input[type=file][data-foto]').forEach(input => {
-        const vista = document.getElementById(input.dataset.vista);
-        const info = document.getElementById(input.dataset.info);
+        const zona = input.closest('[data-zona-foto]');
+        const vista = zona.querySelector('.vista-foto');
+        const info = zona.querySelector('.zona-foto-info');
+        const botonZona = zona.querySelector('.zona-foto-boton');
+        const ayuda = info.textContent;
         const boton = input.form.querySelector('[type=submit]');
+        const sinFoto = mensaje => {   // vuelve la zona a su aspecto inicial
+            vista.hidden = true;
+            zona.classList.remove('con-vista');
+            botonZona.textContent = 'Buscar foto';
+            info.textContent = mensaje;
+        };
         input.addEventListener('change', async () => {
             const original = input.files[0];
-            if (!original) return;
-            vista.hidden = true;
+            if (!original) return sinFoto(ayuda);
+            sinFoto('');
             if (!original.type.startsWith('image/')) {
                 info.textContent = 'El archivo elegido no es una imagen.';
                 input.value = '';
@@ -54,6 +63,8 @@
                 input.files = lista.files;
                 vista.src = URL.createObjectURL(blob);
                 vista.hidden = false;
+                zona.classList.add('con-vista');
+                botonZona.textContent = 'Cambiar foto';
                 info.textContent = `Foto lista: ${kb(original.size)} → ${kb(blob.size)} · ${ancho}×${alto} px · ${extension.toUpperCase()}`;
             } catch (e) {
                 info.textContent = 'No se pudo procesar la imagen. Prueba con otra foto (JPG, PNG o WebP).';
@@ -61,7 +72,38 @@
             }
             boton.disabled = false;
         });
+
+        // Arrastrar y soltar: la foto soltada entra al mismo campo y pasa por la misma reducción.
+        ['dragenter', 'dragover'].forEach(tipo => zona.addEventListener(tipo, e => {
+            if (!traeArchivos(e)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            zona.classList.add('arrastrando');
+        }));
+        zona.addEventListener('dragleave', e => {
+            if (!zona.contains(e.relatedTarget)) zona.classList.remove('arrastrando');
+        });
+        zona.addEventListener('drop', e => {
+            if (!traeArchivos(e)) return;
+            e.preventDefault();
+            zona.classList.remove('arrastrando');
+            const lista = new DataTransfer();   // solo la primera, aunque suelten varias
+            lista.items.add(e.dataTransfer.files[0]);
+            input.files = lista.files;
+            input.dispatchEvent(new Event('change'));
+        });
     });
+
+    // Si la foto cae fuera de la zona, el navegador no la abre (se perdería lo escrito en el formulario).
+    function traeArchivos(e) {
+        return e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+    }
+    ['dragover', 'drop'].forEach(tipo => window.addEventListener(tipo, e => {
+        if (traeArchivos(e) && !(e.target.closest && e.target.closest('[data-zona-foto]'))) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'none';
+        }
+    }));
 
     // Evita enviar el mismo formulario dos veces con un doble clic.
     document.querySelectorAll('form[data-un-envio]').forEach(form => form.addEventListener('submit', () => {

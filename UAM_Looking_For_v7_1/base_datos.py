@@ -279,3 +279,77 @@ def completar_devolucion(con, id, devuelto_por, observaciones):
     ejecutar(f'UPDATE devoluciones SET devuelto_por = :yo, fecha_devolucion = {AHORA}, '
              "observaciones = COALESCE(observaciones || ' · ' || :nota, observaciones, :nota) WHERE id = :id",
              {'yo': devuelto_por, 'nota': observaciones, 'id': id}, con)
+
+
+# Reportes de visitantes (v8.5). Un visitante no es un usuario: sus datos viven solo en su reporte.
+# Las listas nunca leen la foto; el enlace privado de seguimiento solo se guarda como hash (token_hash).
+
+SQL_REPORTES = '''SELECT r.id, r.codigo, r.nombre, r.telefono, r.correo, r.objeto_nombre, r.categoria, r.descripcion,
+                         r.lugar_perdida, r.fecha_perdida, r.estado, r.fecha_registro, r.objeto_id, r.observaciones,
+                         r.actualizado_por, r.fecha_actualizacion, r.whatsapp_estado, r.whatsapp_intentos,
+                         r.whatsapp_fecha, r.whatsapp_detalle, o.titulo AS objeto_titulo, o.estado AS objeto_estado,
+                         o.ubicacion AS objeto_ubicacion, u.nombre AS actualizado_por_nombre
+                  FROM reportes_visitantes r LEFT JOIN objetos o ON o.id = r.objeto_id
+                  LEFT JOIN usuarios u ON u.id = r.actualizado_por'''
+
+
+def insertar_reporte_visitante(con, d):
+    return ejecutar('''INSERT INTO reportes_visitantes (codigo, token_hash, nombre, telefono, correo, objeto_nombre, categoria,
+                       descripcion, lugar_perdida, fecha_perdida, fecha_registro, foto)
+                       VALUES (:codigo, :token_hash, :nombre, :telefono, :correo, :objeto_nombre, :categoria,
+                       :descripcion, :lugar_perdida, :fecha_perdida, ''' + AHORA + ', :foto)', d, con)
+
+
+# Lista para el personal: filtra por estado y por parte del código; primero lo que falta atender.
+def listar_reportes_visitantes(estado=None, codigo=''):
+    return consultar(SQL_REPORTES + ''' WHERE (? IS NULL OR r.estado = ?) AND r.codigo LIKE ?
+                     ORDER BY CASE r.estado WHEN 'Pendiente' THEN 0 WHEN 'En revisión' THEN 1 WHEN 'Localizado' THEN 2 ELSE 3 END,
+                     r.id DESC''', (estado, estado, f'%{codigo}%'))
+
+
+def buscar_reporte_visitante(id, con=None):
+    return consultar(SQL_REPORTES + ' WHERE r.id = ?', (id,), True, con)
+
+
+def buscar_reporte_por_token(token_hash):
+    return consultar(SQL_REPORTES + ' WHERE r.token_hash = ?', (token_hash,), True)
+
+
+def buscar_reporte_por_codigo(codigo):
+    return consultar(SQL_REPORTES + ' WHERE r.codigo = ?', (codigo,), True)
+
+
+def contar_reportes_visitantes():
+    return dict(consultar('SELECT estado, COUNT(*) FROM reportes_visitantes GROUP BY estado'))
+
+
+def foto_reporte_visitante(id):
+    fila = consultar('SELECT foto FROM reportes_visitantes WHERE id = ?', (id,), True)
+    return fila and fila['foto']
+
+
+# Gestión del personal (estado, observaciones y objeto relacionado). El trigger exige personal activo.
+def gestionar_reporte_visitante(con, id, estado, observaciones, objeto_id, usuario_id):
+    ejecutar(f'''UPDATE reportes_visitantes SET estado = ?, observaciones = ?, objeto_id = ?, actualizado_por = ?,
+                fecha_actualizacion = {AHORA} WHERE id = ?''', (estado, observaciones, objeto_id, usuario_id, id), con)
+
+
+# Resultado REAL de cada intento de aviso por WhatsApp (los intentos solo aumentan).
+def anotar_whatsapp(id, estado, detalle):
+    ejecutar(f'''UPDATE reportes_visitantes SET whatsapp_estado = ?, whatsapp_detalle = ?,
+                whatsapp_intentos = whatsapp_intentos + 1, whatsapp_fecha = {AHORA} WHERE id = ?''', (estado, detalle, id))
+
+
+# Objetos que el personal puede relacionar con un reporte: primero los de la misma categoría y bajo custodia.
+def objetos_para_relacionar(categoria):
+    return consultar('''SELECT id, titulo, categoria, fecha, estado, ubicacion, descripcion_publica FROM objetos
+                        ORDER BY categoria = ? DESC, estado IN ('Activo', 'En resguardo', 'En bodega') DESC, fecha DESC, id DESC
+                        LIMIT 300''', (categoria,))
+
+
+# Posibles coincidencias: misma categoría, bajo custodia y encontrados desde el día en que se perdió.
+def objetos_candidatos(categoria, fecha_perdida):
+    return consultar('''SELECT id, titulo, descripcion, descripcion_publica, categoria, lugar_encontrado, fecha, estado, ubicacion
+                        FROM objetos WHERE categoria = ? AND fecha >= ? AND estado IN ('Activo', 'En resguardo', 'En bodega')
+                        ORDER BY fecha, id''', (categoria, fecha_perdida))
+

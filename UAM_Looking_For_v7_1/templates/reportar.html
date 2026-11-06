@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% from 'macros.html' import icono %}
+{% from 'macros.html' import icono, zona_foto %}
 
 {% block contenido %}
 <div class="panel formulario">
@@ -64,9 +64,7 @@
                 </div>
                 <div class="ancho-completo subir-foto">
                     <label for="foto">Fotografía <span class="texto-suave">(opcional)</span></label>
-                    <input type="file" id="foto" name="foto" accept="image/*" data-foto data-vista="vista-foto" data-info="info-foto">
-                    <p class="texto-suave" id="info-foto">Se reduce sola antes de enviarse (máx. 1280 px y 300 KB). En el celular puedes tomarla con la cámara.</p>
-                    <img id="vista-foto" class="vista-foto" alt="Vista previa de la foto" hidden>
+                    {{ zona_foto('Se reduce sola antes de enviarse (máx. 1280 px y 300 KB). En el celular puedes tomarla con la cámara.') }}
                     <label class="casilla">
                         <input type="checkbox" name="foto_publica" value="1" {{ 'checked' if datos.get('foto_publica') }}>
                         Mostrar la foto a los estudiantes (no la marques si deja ver señas que solo el dueño debería saber)

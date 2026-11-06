@@ -1,4 +1,4 @@
-"""Configuración de UAM Looking For v7.1: archivo .env, roles, categorías y estados."""
+"""Configuración de UAM Looking For v8.5: archivo .env, roles, categorías y estados."""
 
 RUTA_ENV = '.env'
 
@@ -15,6 +15,10 @@ ESTADOS = {'Activo': 'activo', 'En resguardo': 'escudo', 'En bodega': 'bodega', 
 ESTADOS_MANUALES = ('Activo', 'En resguardo', 'En bodega')   # bajo custodia
 ESTADOS_RECLAMACION = ('Pendiente', 'Aceptada', 'Rechazada', 'Cancelada')
 TIPOS_PERSONA = ('Estudiante', 'Docente', 'Administrativo', 'Visitante')   # quien trae o retira un objeto
+# Reportes de visitantes (v8.5): estado -> clase CSS (deben coincidir con el CHECK de reportes_visitantes)
+ESTADOS_REPORTE = {'Pendiente': 'pendiente', 'En revisión': 'revision', 'Localizado': 'localizado',
+                   'Resuelto': 'resuelto', 'Cerrado': 'cerrado'}
+CODIGO_PAIS = '505'   # Nicaragua: se antepone a los teléfonos de 8 dígitos para el enlace de WhatsApp
 # Puntos de resguardo. Para agregar uno nuevo basta con sumarlo aquí: la base no cambia.
 UBICACIONES = ('Vida Estudiantil', 'Sala Docente', 'Edificio A')
 MESES = ('enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',

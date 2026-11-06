@@ -9,7 +9,7 @@
     <a href="{{ url_for('admin_usuarios') }}" class="btn">{{ icono('usuarios') }} Gestionar cuentas</a>
 </div>
 
-<div class="resumen-estados tres">
+<div class="resumen-estados cuatro">
     {% for rol, ic, plural in [('Estudiante', 'birrete', 'Estudiantes'), ('Encargado', 'escudo', 'Encargados')] %}
         {% set datos = por_rol.get(rol, {'total': 0, 'activos': 0}) %}
         <a href="{{ url_for('admin_usuarios', rol=rol) }}" class="panel resumen-tarjeta tarjeta-enlace rol-borde-{{ rol|lower }}">
@@ -25,6 +25,13 @@
         <div>
             <span class="resumen-numero">{{ total_objetos }}</span>
             <span class="texto-suave">Objetos · {{ por_estado.get('Entregado', 0) }} entregado(s) · {{ fotos.total }} foto(s), {{ (fotos.peso / 1048576)|round(1) }} MB</span>
+        </div>
+    </a>
+    <a href="{{ url_for('reportes_visitantes') }}" class="panel resumen-tarjeta tarjeta-enlace rol-borde-visitante">
+        {{ icono('usuario') }}
+        <div>
+            <span class="resumen-numero">{{ por_reporte.values()|sum }}</span>
+            <span class="texto-suave">Reportes de visitantes · {{ por_reporte.get('Pendiente', 0) }} pendiente(s)</span>
         </div>
     </a>
 </div>

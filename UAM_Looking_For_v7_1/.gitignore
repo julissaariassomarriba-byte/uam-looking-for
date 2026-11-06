@@ -1,0 +1,4 @@
+.env
+database.db
+database_respaldo_*.db
+__pycache__/

@@ -1,5 +1,5 @@
 -- =====================================================================
--- UAM Looking For v7.1 · Datos de prueba (caso completo de reclamación y devolución)
+-- UAM Looking For v8.5 · Datos de prueba (caso completo de reclamación y devolución, y un reporte de visitante)
 -- Ejecutar después de schema.sql en una base vacía.
 -- En v7.1 NO se escribe a mano el estado del objeto ni el historial de los hechos: lo hacen los triggers.
 -- Solo se escriben a mano las acciones que no nacen de otra tabla (aquí: «Foto»).
@@ -60,6 +60,18 @@ INSERT INTO devoluciones (id, reclamacion_id, recibido_por, fecha_recepcion, obs
 
 -- Devolución, momento 2: María se la devuelve a Ana                   -> «Devuelto»
 UPDATE devoluciones SET devuelto_por = 2, fecha_devolucion = '2026-11-03 09:00:00' WHERE id = 1;
+
+-- Reporte de un visitante (v8.5): sin cuenta y con foto. El aviso por WhatsApp falló y quedó registrado tal cual;
+-- después María lo revisa y lo relaciona con la mochila encontrada (objeto 3).
+INSERT INTO reportes_visitantes (id, codigo, token_hash, nombre, telefono, correo, objeto_nombre, categoria, descripcion,
+                                 lugar_perdida, fecha_perdida, fecha_registro, foto) VALUES
+ (1, 'UAM-7K3P-Q9XD', '2c624c123d87fa9f6a2eecd60bbf0cb668cb0b7b442b52f5a281cc7fe90ed167', 'Sofía Ruiz', '8777 1234', NULL,
+  'Mochila azul', 'Ropa/Accesorios', 'Mochila Totto azul con un cuaderno de Cálculo', 'Aula A-203', '2026-10-30',
+  '2026-10-30 12:00:00', X'FFD8FFE000104A46494600FFD9');
+UPDATE reportes_visitantes SET whatsapp_estado = 'Fallida', whatsapp_intentos = 1, whatsapp_fecha = '2026-10-30 12:00:05',
+       whatsapp_detalle = 'WhatsApp no respondió (sin conexión)' WHERE id = 1;            -- lo hace el sistema
+UPDATE reportes_visitantes SET estado = 'Localizado', objeto_id = 3, observaciones = 'Coincide con la mochila #3',
+       actualizado_por = 2, fecha_actualizacion = '2026-10-31 09:00:00' WHERE id = 1;     -- lo gestiona María
 
 COMMIT;
 

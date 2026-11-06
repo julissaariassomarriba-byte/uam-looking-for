@@ -1,4 +1,4 @@
-"""Validaciones de UAM Looking For v7.1 que la base de datos no puede hacer sola.
+"""Validaciones de UAM Looking For v8.5 que la base de datos no puede hacer sola.
 
 La base revisa QUÉ se guarda (roles de quien firma cada hecho, estados, fechas). Lo que no sabe es QUIÉN
 ESTÁ CONECTADO: eso lo revisa este módulo antes de cada operación. También calcula los hashes de las
@@ -51,6 +51,8 @@ PERMISOS = {
     'presentar_reclamacion': lambda u, x=None: u['contrasena_hash'] is not None,
     # solo el autor cancela su propia reclamación (la base no sabe quién pulsó el botón)
     'cancelar_reclamacion':  lambda u, r=None: r is not None and r['usuario_id'] == u['id'],
+    # v8.5: reportar como visitante no necesita cuenta (no pasa por aquí); gestionar el reporte es del personal
+    'gestionar_reporte_visitante': lambda u, x=None: u['rol'] in PERSONAL,
 }
 
 

@@ -1,22 +1,30 @@
-"""UAM Looking For v7.1: sistema de objetos perdidos y encontrados del campus (Flask + SQLite)."""
+"""UAM Looking For v8.5: sistema de objetos perdidos y encontrados del campus (Flask + SQLite)."""
+import functools
+import hmac
+import re
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, abort, g
 
 import base_datos as bd
 import imagenes
 import logica
 import migrar
+import notificaciones
 import reporte_pdf
-from config import (CATEGORIAS, ESTADOS, ESTADOS_MANUALES, ESTADOS_RECLAMACION, ROL_ADMIN, ROL_ESTUDIANTE,
+from config import (CATEGORIAS, ESTADOS, ESTADOS_MANUALES, ESTADOS_RECLAMACION, ESTADOS_REPORTE, ROL_ADMIN, ROL_ESTUDIANTE,
                     ROLES_GESTIONABLES, ROLES_PERSONAL, TIPOS_PERSONA, UBICACIONES, leer_env)
 
 app = Flask(__name__)
-app.secret_key = leer_env().get('SECRET_KEY') or bd.token()  # sin SECRET_KEY, las sesiones duran hasta reiniciar
+env_inicial = leer_env()
+app.secret_key = env_inicial.get('SECRET_KEY') or bd.token()  # sin SECRET_KEY, las sesiones duran hasta reiniciar
 # MAX_CONTENT_LENGTH: Flask corta cualquier envío de más de 2 MB antes de leerlo (las fotos llegan ya reducidas).
-app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax', MAX_CONTENT_LENGTH=2 * 1024 * 1024)
+# COOKIE_SEGURA=1 en el .env: la cookie de sesión solo viaja por HTTPS (actívalo junto con «Force HTTPS»).
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax', MAX_CONTENT_LENGTH=2 * 1024 * 1024,
+                  SESSION_COOKIE_SECURE=env_inicial.get('COOKIE_SEGURA') == '1')
 app.jinja_env.filters['mes'] = logica.mes_legible
 migrar.migrar_si_hace_falta(bd.RUTA_BD)
 bd.crear_tablas()
-logica.sincronizar_admin(leer_env())
+logica.sincronizar_admin(env_inicial)
 
 
 # Sesión, permisos y token CSRF (se revisan en el servidor en cada petición)
@@ -32,8 +40,20 @@ def cargar_usuario():
     if tiene_rol(ROL_ADMIN) and not (session.get('acceso_admin') and logica.es_admin_del_env(g.usuario, leer_env())):
         session.clear()
         return redirect(url_for('admin_panel'))
-    if request.method == 'POST' and request.form.get('csrf_token') != session.get('csrf_token'):
+    # El token debe existir y coincidir (comparación de tiempo constante, en bytes para aceptar cualquier texto).
+    esperado = session.get('csrf_token', '')
+    if request.method == 'POST' and not (esperado and hmac.compare_digest(
+            request.form.get('csrf_token', '').encode('utf-8'), esperado.encode('utf-8'))):
         abort(400, 'Formulario vencido o inválido. Recarga la página e inténtalo de nuevo.')
+
+
+# Cabeceras de seguridad en todas las respuestas: no mostrar el sitio dentro de otro (clickjacking), no adivinar
+# tipos de archivo y no enviar la dirección completa a otros sitios. setdefault respeta las que ya puso una ruta.
+@app.after_request
+def cabeceras_seguridad(respuesta):
+    for nombre, valor in (('X-Frame-Options', 'DENY'), ('X-Content-Type-Options', 'nosniff'), ('Referrer-Policy', 'same-origin')):
+        respuesta.headers.setdefault(nombre, valor)
+    return respuesta
 
 
 def tiene_rol(*roles):
@@ -52,9 +72,24 @@ def avisar(ok, mensaje):
     return ok
 
 
+# Filtro de la URL (?categoria=, ?estado=…): solo vale si es uno de los permitidos; si no, None (sin filtro).
+def opcion(nombre, permitidos, defecto=None):
+    valor = request.args.get(nombre, defecto)
+    return valor if valor in permitidos else None
+
+
+# Solo se vuelve a páginas de este sitio: «//otro» y «/\otro» llevarían a otra página, y los navegadores
+# ignoran tabuladores y saltos de línea dentro de una dirección.
+def ruta_interna(destino):
+    if destino.startswith('/') and not destino.startswith('//') and not any(c in destino for c in '\\\t\r\n'):
+        return destino
+    return None
+
+
 # Decorador: exige sesión y, si se indican, alguno de los roles.
 def requiere(*roles, mensaje='', acceso='login'):
     def decorador(vista):
+        @functools.wraps(vista)   # conserva el nombre de la función: Flask lo usa como nombre de la ruta
         def envoltura(*args, **kwargs):
             if not g.usuario:
                 flash('Debes iniciar sesión para continuar.', 'error')
@@ -63,7 +98,6 @@ def requiere(*roles, mensaje='', acceso='login'):
                 flash(mensaje, 'error')
                 return redirect(url_for('inicio'))
             return vista(*args, **kwargs)
-        envoltura.__name__ = vista.__name__
         return envoltura
     return decorador
 
@@ -83,6 +117,8 @@ def variables_globales():
                 es_admin=tiene_rol(ROL_ADMIN), es_encargado=tiene_rol(*ROLES_PERSONAL), es_estudiante=estudiante,
                 csrf_token=token_csrf,
                 pendientes=bd.contar_reclamaciones().get('Pendiente', 0) if tiene_rol(*ROLES_PERSONAL) else 0,
+                estados_reporte=ESTADOS_REPORTE,
+                reportes_nuevos=bd.contar_reportes_visitantes().get('Pendiente', 0) if tiene_rol(*ROLES_PERSONAL) else 0,
                 por_retirar=bd.contar_por_retirar(g.usuario['id']) if estudiante else 0)
 
 
@@ -149,8 +185,7 @@ def logout():
 @app.route('/')
 @login_requerido
 def inicio():
-    categoria = request.args.get('categoria') if request.args.get('categoria') in CATEGORIAS else None
-    ubicacion = request.args.get('ubicacion') if request.args.get('ubicacion') in UBICACIONES else None
+    categoria, ubicacion = opcion('categoria', CATEGORIAS), opcion('ubicacion', UBICACIONES)
     return render_template('index.html', objetos=bd.listar_objetos(categoria, ubicacion, publicos=not tiene_rol(*ROLES_PERSONAL)),
                            categoria_actual=categoria, ubicacion_actual=ubicacion, por_categoria=bd.contar_objetos_por('categoria'),
                            por_estado=bd.contar_objetos_por('estado'), por_ubicacion=bd.contar_objetos_por('ubicacion'))
@@ -175,10 +210,9 @@ def guia():
 
 @app.route('/objeto/<int:id>', methods=['GET', 'POST'])
 @login_requerido
-def detalle(id, datos_entrega=None):
-    personal = tiene_rol(*ROLES_PERSONAL)
-    if request.method == 'POST' and request.endpoint == 'detalle':
-        if not personal:
+def detalle(id):
+    if request.method == 'POST':
+        if not tiene_rol(*ROLES_PERSONAL):
             abort(403)
         f, yo = request.form, g.usuario['id']
         avisar(*{'descripcion_publica': lambda: logica.actualizar_descripcion_publica(id, f.get('descripcion_publica'), yo),
@@ -188,7 +222,13 @@ def detalle(id, datos_entrega=None):
                  'devolver': lambda: logica.devolver_al_dueno(id, f.get('confirmado') == '1', f.get('observaciones'), yo)
                  }.get(f.get('accion'), lambda: logica.cambiar_estado_manual(id, f.get('estado'), yo))())
         return redirect(url_for('detalle', id=id))
+    return mostrar_detalle(id)
 
+
+# Página de un objeto: el personal ve el registro completo; un estudiante, solo la parte pública.
+# Si una entrega no se pudo guardar, se vuelve a mostrar con lo que escribió el encargado (datos_entrega).
+def mostrar_detalle(id, datos_entrega=None):
+    personal = tiene_rol(*ROLES_PERSONAL)
     objeto = bd.buscar_objeto(id, publico=not personal) or abort(404)
     entrega = bd.buscar_entrega(id)
     if not personal:
@@ -207,7 +247,7 @@ def entregar(id):
     if avisar(*logica.registrar_entrega(id, f.get('nombre'), f.get('tipo'), f.get('cif'), f.get('telefono'), f.get('senas'),
                                         f.get('confirmado') == '1', g.usuario['id'])):
         return redirect(url_for('detalle', id=id))
-    return detalle(id, datos_entrega=f)
+    return mostrar_detalle(id, datos_entrega=f)
 
 
 # Recepción de un objeto. Cada formulario lleva un código «envio»: si llega dos veces (doble clic o recarga),
@@ -274,7 +314,7 @@ def cancelar_reclamacion(id):
 @app.route('/reclamaciones')
 @encargado_requerido
 def reclamaciones():
-    estado = request.args.get('estado', 'Pendiente') if request.args.get('estado', 'Pendiente') in ESTADOS_RECLAMACION else None
+    estado = opcion('estado', ESTADOS_RECLAMACION, 'Pendiente')
     return render_template('reclamaciones.html', reclamaciones=bd.listar_reclamaciones(estado), estado_actual=estado,
                            conteo=bd.contar_reclamaciones())
 
@@ -283,8 +323,95 @@ def reclamaciones():
 @encargado_requerido
 def gestionar_reclamacion(id):
     avisar(*logica.gestionar_reclamacion(id, request.form.get('accion'), request.form.get('nota'), g.usuario['id']))
-    destino = request.form.get('volver', '')
-    return redirect(destino if destino.startswith('/') and not destino.startswith('//') else url_for('reclamaciones'))
+    return redirect(ruta_interna(request.form.get('volver', '')) or url_for('reclamaciones'))
+
+
+# Visitantes (v8.5): reportan un objeto perdido y siguen su estado SIN cuenta ni sesión iniciada.
+
+# Enlace al reporte en el panel (para el aviso de WhatsApp). SITIO_URL en el .env fija el dominio público
+# (por ejemplo https://uamlookingfor.pythonanywhere.com); sin él se usa la dirección con la que llegó la petición.
+def enlace_reporte(id):
+    base = (leer_env().get('SITIO_URL') or '').strip().rstrip('/')
+    return base + url_for('reporte_visitante', id=id) if base else url_for('reporte_visitante', id=id, _external=True)
+
+
+@app.route('/visitante')
+def visitante():
+    return render_template('visitante.html')
+
+
+# Igual que en «Recibir objeto», el código «envio» evita que un doble clic o una recarga guarde el reporte dos veces.
+@app.route('/visitante/reportar', methods=['GET', 'POST'])
+def visitante_reportar():
+    envios = session.get('envios_visitante', {})
+    if request.method == 'POST':
+        envio = request.form.get('envio', '')
+        if envio in envios:
+            return redirect(url_for('visitante_seguimiento', token=envios[envio]))
+        ok, resultado = logica.registrar_reporte_visitante(request.form, request.files.get('foto'))
+        if ok:   # el reporte ya está guardado: el aviso por WhatsApp no puede hacer que se pierda
+            logica.notificar_reporte(resultado['id'], enlace_reporte(resultado['id']))
+            session['envios_visitante'] = dict(list(envios.items())[-4:] + [(envio, resultado['token'])])
+            return redirect(url_for('visitante_seguimiento', token=resultado['token'], nuevo=1))
+        flash(resultado, 'error')
+    return render_template('visitante_reportar.html', datos=request.form, hoy=bd.ahora()[:10],
+                           envio=request.form.get('envio') or bd.token())
+
+
+# Enlace privado: solo quien lo tiene ve el estado (el token no se guarda en la base, solo su hash).
+@app.route('/visitante/seguimiento/<token>')
+def visitante_seguimiento(token):
+    reporte = logica.seguimiento(token) or abort(404)
+    respuesta = app.make_response(render_template(
+        'visitante_seguimiento.html', r=reporte, nuevo=request.args.get('nuevo') == '1',
+        enlace=url_for('visitante_seguimiento', token=token, _external=True)))
+    respuesta.headers['Cache-Control'] = 'no-store'   # la página lleva el enlace privado: que el navegador no la guarde
+    return respuesta
+
+
+@app.route('/visitante/consultar', methods=['GET', 'POST'])
+def visitante_consultar():
+    reporte = None
+    if request.method == 'POST':
+        reporte = logica.consultar_reporte(request.form.get('codigo'), request.form.get('telefono'))
+        if not reporte:
+            flash('No encontramos un reporte con ese código y ese teléfono. Revisa los datos que diste al reportar.', 'error')
+    respuesta = app.make_response(render_template('visitante_consultar.html', r=reporte, datos=request.form))
+    respuesta.headers['Cache-Control'] = 'no-store'
+    return respuesta
+
+
+# Panel del personal: reportes de visitantes
+
+@app.route('/reportes-visitantes')
+@encargado_requerido
+def reportes_visitantes():
+    estado = opcion('estado', ESTADOS_REPORTE)
+    codigo = re.sub(r'[^A-Z0-9-]', '', (request.args.get('codigo') or '').upper())[:13]   # sin comodines de LIKE
+    return render_template('reportes_visitantes.html', reportes=bd.listar_reportes_visitantes(estado, codigo),
+                           estado_actual=estado, codigo=codigo, conteo=bd.contar_reportes_visitantes())
+
+
+@app.route('/reportes-visitantes/<int:id>', methods=['GET', 'POST'])
+@encargado_requerido
+def reporte_visitante(id):
+    if request.method == 'POST':
+        f, yo = request.form, g.usuario['id']
+        avisar(*{'whatsapp': lambda: logica.reintentar_whatsapp(id, enlace_reporte(id)),
+                 'relacionar': lambda: logica.relacionar_objeto(id, f.get('objeto_id'), yo)
+                 }.get(f.get('accion'), lambda: logica.gestionar_reporte_visitante(id, f.get('estado'), f.get('observaciones'), yo))())
+        return redirect(url_for('reporte_visitante', id=id))
+    reporte = bd.buscar_reporte_visitante(id) or abort(404)
+    return render_template('reporte_visitante.html', r=reporte, coincidencias=logica.posibles_coincidencias(reporte),
+                           objetos=bd.objetos_para_relacionar(reporte['categoria']), contacto=logica.enlaces_contacto(reporte),
+                           whatsapp_falta=notificaciones.faltantes(leer_env()))
+
+
+@app.route('/reportes-visitantes/<int:id>/foto')
+@encargado_requerido
+def foto_reporte_visitante(id):
+    datos = bd.foto_reporte_visitante(id) or abort(404)
+    return Response(datos, mimetype=imagenes.formato(datos), headers={'Cache-Control': 'private, max-age=3600'})
 
 
 # Panel de administración (/admin, credenciales en el .env)
@@ -310,6 +437,7 @@ def admin_panel():
     por_estado = bd.contar_objetos_por('estado')
     return render_template('admin_panel.html', por_rol=bd.contar_usuarios_por_rol(), por_estado=por_estado,
                            total_objetos=sum(por_estado.values()), reclamaciones_pendientes=bd.listar_reclamaciones('Pendiente'),
+                           por_reporte=bd.contar_reportes_visitantes(),
                            movimientos=bd.listar_historial(limite=8), fotos=bd.uso_fotos())
 
 
@@ -327,7 +455,7 @@ def admin_usuarios(id=None):
         return redirect(url_for('admin_usuarios'))
     if usuario:
         return render_template('admin_editar_usuario.html', usuario=usuario, datos=f or usuario, roles=ROLES_GESTIONABLES)
-    rol = request.args.get('rol') if request.args.get('rol') in (ROL_ADMIN, *ROLES_GESTIONABLES) else None
+    rol = opcion('rol', (ROL_ADMIN, *ROLES_GESTIONABLES))
     busqueda = (request.args.get('q') or '').strip()
     return render_template('admin_usuarios.html', usuarios=bd.listar_usuarios(rol, busqueda), rol_actual=rol,
                            busqueda=busqueda, roles=ROLES_GESTIONABLES, datos=f)

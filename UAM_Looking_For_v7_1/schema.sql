@@ -1,7 +1,9 @@
 -- =====================================================================
--- UAM Looking For v7.1 · Modelo de base de datos (SQLite 3.25 o superior)
--- 6 tablas · 13 llaves foráneas · 1 vista · normalizado hasta 3FN
+-- UAM Looking For v8.5 · Modelo de base de datos (SQLite 3.25 o superior)
+-- 7 tablas · 15 llaves foráneas · 1 vista · normalizado hasta 3FN
 -- Se puede ejecutar desde cero y más de una vez: IF NOT EXISTS no borra datos.
+-- v8.5 solo AGREGA la tabla reportes_visitantes (con su índice y sus triggers): en una base v7.1/v8 existente
+-- se crea al iniciar la app y las demás tablas no cambian.
 --
 -- Dónde vive cada regla:
 --   CHECK     -> lo que depende de una sola fila (formatos, fechas, coherencia entre columnas).
@@ -156,6 +158,54 @@ CREATE TABLE IF NOT EXISTS historial (
 );
 
 -- ---------------------------------------------------------------------
+-- reportes_visitantes (v8.5): un visitante, SIN cuenta, avisa que PERDIÓ un objeto dentro de la universidad.
+--   No se crea una fila en usuarios: sus datos de contacto viven solo en su reporte.
+--   codigo     = lo que ve el visitante (UAM-XXXX-XXXX, al azar, no consecutivo).
+--   token_hash = SHA-256 del enlace privado de seguimiento. El enlace no se guarda: ni quien lea la base
+--                puede abrir reportes ajenos, y adivinar el código no basta (la consulta pide también el teléfono).
+--   Lo que reportó el visitante no cambia; el personal activo gestiona estado, observaciones y objeto_id.
+--   objeto_id  = objeto encontrado que el personal relacionó como posible coincidencia (opcional).
+--   whatsapp_* = resultado REAL del aviso al encargado: Pendiente (sin intentar), Enviada, Fallida o
+--                No configurada; whatsapp_detalle guarda el id del mensaje o el motivo del fallo.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS reportes_visitantes (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    codigo              TEXT    NOT NULL UNIQUE CHECK (codigo GLOB 'UAM-[A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9]-[A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9]'),
+    token_hash          TEXT    NOT NULL UNIQUE CHECK (length(token_hash) = 64 AND token_hash NOT GLOB '*[^0-9a-f]*'),
+    nombre              TEXT    NOT NULL CHECK (trim(nombre) <> ''),
+    telefono            TEXT    NOT NULL CHECK (trim(telefono) <> ''),
+    correo              TEXT    CHECK (correo IS NULL OR (correo = trim(correo) AND correo LIKE '_%@_%._%')),
+    objeto_nombre       TEXT    NOT NULL CHECK (trim(objeto_nombre) <> ''),
+    categoria           TEXT    NOT NULL CHECK (categoria IN ('Electrónicos', 'Documentos/Carné', 'Ropa/Accesorios',
+                                                              'Llaves', 'Útiles/Libros', 'Otros')),
+    descripcion         TEXT    NOT NULL CHECK (trim(descripcion) <> ''),
+    lugar_perdida       TEXT    NOT NULL CHECK (trim(lugar_perdida) <> ''),
+    fecha_perdida       TEXT    NOT NULL CHECK (date(fecha_perdida) IS fecha_perdida),
+    estado              TEXT    NOT NULL DEFAULT 'Pendiente'
+                                CHECK (estado IN ('Pendiente', 'En revisión', 'Localizado', 'Resuelto', 'Cerrado')),
+    fecha_registro      TEXT    NOT NULL CHECK (datetime(fecha_registro) IS fecha_registro),
+    objeto_id           INTEGER REFERENCES objetos (id)  ON UPDATE RESTRICT ON DELETE RESTRICT,
+    observaciones       TEXT    CHECK (observaciones IS NULL OR trim(observaciones) <> ''),
+    actualizado_por     INTEGER REFERENCES usuarios (id) ON UPDATE RESTRICT ON DELETE RESTRICT,
+    fecha_actualizacion TEXT    CHECK (fecha_actualizacion IS NULL OR datetime(fecha_actualizacion) IS fecha_actualizacion),
+    whatsapp_estado     TEXT    NOT NULL DEFAULT 'Pendiente'
+                                CHECK (whatsapp_estado IN ('Pendiente', 'Enviada', 'Fallida', 'No configurada')),
+    whatsapp_intentos   INTEGER NOT NULL DEFAULT 0 CHECK (whatsapp_intentos >= 0),
+    whatsapp_fecha      TEXT    CHECK (whatsapp_fecha IS NULL OR datetime(whatsapp_fecha) IS whatsapp_fecha),
+    whatsapp_detalle    TEXT    CHECK (whatsapp_detalle IS NULL OR trim(whatsapp_detalle) <> ''),
+    -- la foto es obligatoria y va al final de la fila (listar reportes no la lee): JPEG o WebP de 300 KB o menos
+    foto                BLOB    NOT NULL CHECK (length(foto) BETWEEN 1 AND 307200 AND
+                                       (substr(foto, 1, 3) = X'FFD8FF' OR
+                                        (substr(foto, 1, 4) = X'52494646' AND substr(foto, 9, 4) = X'57454250'))),
+    CHECK (fecha_perdida <= date(fecha_registro)),                                   -- se perdió antes de reportarlo
+    CHECK ((actualizado_por IS NULL) = (fecha_actualizacion IS NULL)),                -- la gestión dice quién y cuándo
+    CHECK (fecha_actualizacion IS NULL OR fecha_actualizacion >= fecha_registro),
+    CHECK ((whatsapp_estado = 'Pendiente') = (whatsapp_intentos = 0)),                -- Pendiente = todavía no se intentó
+    CHECK (whatsapp_intentos = 0 OR whatsapp_fecha IS NOT NULL),
+    CHECK (whatsapp_estado <> 'Enviada' OR whatsapp_detalle IS NOT NULL)              -- enviada = hay id del mensaje
+);
+
+-- ---------------------------------------------------------------------
 -- Vista: cada devolución con su reclamación, su entrega original y su objeto, sin guardar nada dos veces.
 -- ---------------------------------------------------------------------
 CREATE VIEW IF NOT EXISTS vista_devoluciones AS
@@ -169,7 +219,8 @@ JOIN objetos o ON o.id = e.objeto_id;
 
 -- ---------------------------------------------------------------------
 -- Índices: solo los que usan las consultas de la app (SQLite no indexa solo las FK).
--- Ya tienen índice por su UNIQUE: usuarios.cif, usuarios.correo, entregas.objeto_id, devoluciones.reclamacion_id.
+-- Ya tienen índice por su UNIQUE: usuarios.cif, usuarios.correo, entregas.objeto_id, devoluciones.reclamacion_id,
+-- reportes_visitantes.codigo y reportes_visitantes.token_hash.
 -- Todo índice de SQLite guarda el id al final, así que (objeto_id) ya devuelve el historial en orden de id.
 -- ---------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_objetos_categoria      ON objetos (categoria);          -- filtro del catálogo
@@ -181,6 +232,7 @@ CREATE INDEX IF NOT EXISTS idx_reclamaciones_entrega  ON reclamaciones (entrega_
 CREATE INDEX IF NOT EXISTS idx_reclamaciones_estado   ON reclamaciones (estado);       -- bandeja de pendientes
 CREATE INDEX IF NOT EXISTS idx_reclamaciones_usuario  ON reclamaciones (usuario_id);   -- «Mis reclamaciones»
 CREATE INDEX IF NOT EXISTS idx_historial_objeto       ON historial (objeto_id);        -- historial de un objeto (ya en orden de id)
+CREATE INDEX IF NOT EXISTS idx_reportes_visitantes_estado ON reportes_visitantes (estado);   -- bandeja por estado (v8.5)
 
 -- Índices únicos parciales: reglas que dependen del estado de la fila
 CREATE UNIQUE INDEX IF NOT EXISTS uq_reclamacion_aceptada  ON reclamaciones (entrega_id)             WHERE estado = 'Aceptada';
@@ -362,6 +414,33 @@ BEGIN
     SELECT RAISE(ABORT, 'El historial debe decir el estado real del objeto.')
     WHERE NEW.estado_nuevo IS NOT NULL AND NEW.estado_nuevo IS NOT (SELECT estado FROM objetos WHERE id = NEW.objeto_id);
 END;
+
+-- ---------- G. Reportes de visitantes (v8.5) ----------
+-- Nuevo: lo crea el visitante, así que empieza sin gestión y sin intentos de WhatsApp.
+CREATE TRIGGER IF NOT EXISTS trg_reporte_visitante_nuevo BEFORE INSERT ON reportes_visitantes
+BEGIN
+    SELECT RAISE(ABORT, 'Un reporte de visitante nuevo empieza Pendiente, sin gestión ni intentos de WhatsApp.')
+    WHERE NEW.estado <> 'Pendiente' OR NEW.objeto_id IS NOT NULL OR NEW.observaciones IS NOT NULL
+       OR NEW.actualizado_por IS NOT NULL OR NEW.whatsapp_intentos <> 0;
+END;
+
+-- Lo que reportó el visitante no cambia; gestionar (estado, observaciones, objeto) es del personal activo;
+-- los intentos de WhatsApp solo aumentan (no se puede «borrar» un fallo).
+CREATE TRIGGER IF NOT EXISTS trg_reporte_visitante_gestion BEFORE UPDATE ON reportes_visitantes
+BEGIN
+    SELECT RAISE(ABORT, 'Lo que reportó el visitante no se modifica.')
+    WHERE NEW.codigo IS NOT OLD.codigo OR NEW.token_hash IS NOT OLD.token_hash OR NEW.fecha_registro IS NOT OLD.fecha_registro
+       OR NEW.nombre IS NOT OLD.nombre OR NEW.telefono IS NOT OLD.telefono OR NEW.correo IS NOT OLD.correo
+       OR NEW.objeto_nombre IS NOT OLD.objeto_nombre OR NEW.categoria IS NOT OLD.categoria OR NEW.descripcion IS NOT OLD.descripcion
+       OR NEW.lugar_perdida IS NOT OLD.lugar_perdida OR NEW.fecha_perdida IS NOT OLD.fecha_perdida OR NEW.foto IS NOT OLD.foto;
+    SELECT RAISE(ABORT, 'Solo el personal activo gestiona los reportes de visitantes.')
+    WHERE (NEW.estado IS NOT OLD.estado OR NEW.observaciones IS NOT OLD.observaciones OR NEW.objeto_id IS NOT OLD.objeto_id)
+      AND NOT EXISTS (SELECT 1 FROM usuarios WHERE id = NEW.actualizado_por AND rol IN ('Administrador', 'Encargado') AND activo = 1);
+    SELECT RAISE(ABORT, 'Los intentos de WhatsApp solo aumentan.') WHERE NEW.whatsapp_intentos < OLD.whatsapp_intentos;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_reportes_visitantes_sin_borrar BEFORE DELETE ON reportes_visitantes
+BEGIN SELECT RAISE(ABORT, 'Un reporte de visitante no se borra: se cierra.'); END;
 
 -- ---------------------------------------------------------------------
 -- Consulta de ejemplo: la vida de un objeto con su estado anterior, sin guardarlo dos veces.

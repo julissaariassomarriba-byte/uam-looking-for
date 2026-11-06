@@ -50,6 +50,8 @@
         </form>
         <p class="acceso-cambio">¿Eres estudiante y no tienes cuenta?</p>
         <a href="{{ url_for('registro') }}" class="btn btn-claro btn-bloque">{{ icono('birrete') }} Crear cuenta de estudiante</a>
+        <p class="acceso-cambio">¿Perdiste algo y no tienes cuenta en la UAM?</p>
+        <a href="{{ url_for('visitante') }}" class="btn btn-claro btn-bloque">{{ icono('usuario') }} Ingresar como visitante</a>
         {% endif %}
 
         <div class="acceso-ayuda">
@@ -58,6 +60,7 @@
                 <li>Verifica que estés digitando correctamente tu usuario (CIF) y contraseña.</li>
                 <li>Si olvidaste tu contraseña, comunícate con la oficina de Vida Estudiantil.</li>
                 <li>Los estudiantes pueden crear su cuenta aquí. Las cuentas de encargados las crea el administrador.</li>
+                <li>Si visitas la universidad y perdiste algo, usa «Ingresar como visitante»: no necesitas cuenta.</li>
             </ul>
         </div>
 

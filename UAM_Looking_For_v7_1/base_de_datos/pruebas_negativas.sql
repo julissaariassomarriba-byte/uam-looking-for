@@ -1,5 +1,5 @@
 -- =====================================================================
--- UAM Looking For v7.1 · Pruebas negativas: cada una DEBE ser rechazada por la base.
+-- UAM Looking For v8.5 · Pruebas negativas: cada una DEBE ser rechazada por la base.
 -- Cada bloque tiene un encabezado «PRUEBA» con el nombre y el error esperado. Las líneas hasta «-- FALLA»
 -- preparan el caso (deben funcionar); la sentencia después de «-- FALLA» es la que debe fallar.
 -- probar_bd.py ejecuta cada bloque en una transacción y la deshace al terminar.
@@ -361,3 +361,93 @@ INSERT INTO historial (objeto_id, usuario_id, accion, estado_nuevo, fecha_hora) 
 -- PRUEBA: fecha y hora con formato incorrecto | espera: CHECK constraint failed
 -- FALLA
 INSERT INTO historial (objeto_id, usuario_id, accion, fecha_hora) VALUES (2, 3, 'Foto', '03/11/2026 10:00');
+
+-- ======================= reportes_visitantes (v8.5) =======================
+-- Caso base: el reporte 1 de Sofía (Localizado, relacionado con la mochila, un intento de WhatsApp fallido).
+-- PRUEBA: reporte sin foto | espera: NOT NULL constraint failed
+-- FALLA
+INSERT INTO reportes_visitantes (codigo, token_hash, nombre, telefono, objeto_nombre, categoria, descripcion, lugar_perdida, fecha_perdida, fecha_registro) VALUES ('UAM-AAAA-BBBB', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Ana', '8888 1111', 'Celular', 'Electrónicos', 'Negro', 'Cafetería', '2026-11-01', '2026-11-01 10:00:00');
+
+-- PRUEBA: foto que no es JPEG ni WebP (PNG) | espera: CHECK constraint failed
+-- FALLA
+INSERT INTO reportes_visitantes (codigo, token_hash, nombre, telefono, objeto_nombre, categoria, descripcion, lugar_perdida, fecha_perdida, fecha_registro, foto) VALUES ('UAM-AAAA-BBBB', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Ana', '8888 1111', 'Celular', 'Electrónicos', 'Negro', 'Cafetería', '2026-11-01', '2026-11-01 10:00:00', X'89504E470D0A1A0A');
+
+-- PRUEBA: código con otro formato | espera: CHECK constraint failed
+-- FALLA
+INSERT INTO reportes_visitantes (codigo, token_hash, nombre, telefono, objeto_nombre, categoria, descripcion, lugar_perdida, fecha_perdida, fecha_registro, foto) VALUES ('REP-1', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Ana', '8888 1111', 'Celular', 'Electrónicos', 'Negro', 'Cafetería', '2026-11-01', '2026-11-01 10:00:00', X'FFD8FFE000104A46494600FFD9');
+
+-- PRUEBA: código repetido | espera: UNIQUE constraint failed
+-- FALLA
+INSERT INTO reportes_visitantes (codigo, token_hash, nombre, telefono, objeto_nombre, categoria, descripcion, lugar_perdida, fecha_perdida, fecha_registro, foto) VALUES ('UAM-7K3P-Q9XD', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Ana', '8888 1111', 'Celular', 'Electrónicos', 'Negro', 'Cafetería', '2026-11-01', '2026-11-01 10:00:00', X'FFD8FFE000104A46494600FFD9');
+
+-- PRUEBA: token de seguimiento que no es un SHA-256 | espera: CHECK constraint failed
+-- FALLA
+INSERT INTO reportes_visitantes (codigo, token_hash, nombre, telefono, objeto_nombre, categoria, descripcion, lugar_perdida, fecha_perdida, fecha_registro, foto) VALUES ('UAM-AAAA-BBBB', 'enlace-en-texto-plano', 'Ana', '8888 1111', 'Celular', 'Electrónicos', 'Negro', 'Cafetería', '2026-11-01', '2026-11-01 10:00:00', X'FFD8FFE000104A46494600FFD9');
+
+-- PRUEBA: categoría inventada | espera: CHECK constraint failed
+-- FALLA
+INSERT INTO reportes_visitantes (codigo, token_hash, nombre, telefono, objeto_nombre, categoria, descripcion, lugar_perdida, fecha_perdida, fecha_registro, foto) VALUES ('UAM-AAAA-BBBB', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Ana', '8888 1111', 'Celular', 'Mascotas', 'Negro', 'Cafetería', '2026-11-01', '2026-11-01 10:00:00', X'FFD8FFE000104A46494600FFD9');
+
+-- PRUEBA: correo sin formato de correo | espera: CHECK constraint failed
+-- FALLA
+INSERT INTO reportes_visitantes (codigo, token_hash, nombre, telefono, correo, objeto_nombre, categoria, descripcion, lugar_perdida, fecha_perdida, fecha_registro, foto) VALUES ('UAM-AAAA-BBBB', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Ana', '8888 1111', 'ana-arroba-correo', 'Celular', 'Electrónicos', 'Negro', 'Cafetería', '2026-11-01', '2026-11-01 10:00:00', X'FFD8FFE000104A46494600FFD9');
+
+-- PRUEBA: se perdió después de reportarlo | espera: CHECK constraint failed
+-- FALLA
+INSERT INTO reportes_visitantes (codigo, token_hash, nombre, telefono, objeto_nombre, categoria, descripcion, lugar_perdida, fecha_perdida, fecha_registro, foto) VALUES ('UAM-AAAA-BBBB', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Ana', '8888 1111', 'Celular', 'Electrónicos', 'Negro', 'Cafetería', '2026-11-05', '2026-11-01 10:00:00', X'FFD8FFE000104A46494600FFD9');
+
+-- PRUEBA: reporte nuevo que ya nace «Localizado» | espera: Un reporte de visitante nuevo empieza Pendiente
+-- FALLA
+INSERT INTO reportes_visitantes (codigo, token_hash, nombre, telefono, objeto_nombre, categoria, descripcion, lugar_perdida, fecha_perdida, fecha_registro, estado, foto) VALUES ('UAM-AAAA-BBBB', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Ana', '8888 1111', 'Celular', 'Electrónicos', 'Negro', 'Cafetería', '2026-11-01', '2026-11-01 10:00:00', 'Localizado', X'FFD8FFE000104A46494600FFD9');
+
+-- PRUEBA: reporte nuevo ya relacionado con un objeto | espera: Un reporte de visitante nuevo empieza Pendiente
+-- FALLA
+INSERT INTO reportes_visitantes (codigo, token_hash, nombre, telefono, objeto_nombre, categoria, descripcion, lugar_perdida, fecha_perdida, fecha_registro, objeto_id, foto) VALUES ('UAM-AAAA-BBBB', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Ana', '8888 1111', 'Celular', 'Electrónicos', 'Negro', 'Cafetería', '2026-11-01', '2026-11-01 10:00:00', 2, X'FFD8FFE000104A46494600FFD9');
+
+-- PRUEBA: reporte nuevo con un aviso de WhatsApp «ya enviado» | espera: Un reporte de visitante nuevo empieza Pendiente
+-- FALLA
+INSERT INTO reportes_visitantes (codigo, token_hash, nombre, telefono, objeto_nombre, categoria, descripcion, lugar_perdida, fecha_perdida, fecha_registro, whatsapp_estado, whatsapp_intentos, whatsapp_fecha, whatsapp_detalle, foto) VALUES ('UAM-AAAA-BBBB', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Ana', '8888 1111', 'Celular', 'Electrónicos', 'Negro', 'Cafetería', '2026-11-01', '2026-11-01 10:00:00', 'Enviada', 1, '2026-11-01 10:00:01', 'wamid.falso', X'FFD8FFE000104A46494600FFD9');
+
+-- PRUEBA: cambiar el teléfono que dio el visitante | espera: Lo que reportó el visitante no se modifica
+-- FALLA
+UPDATE reportes_visitantes SET telefono = '8000 0000' WHERE id = 1;
+
+-- PRUEBA: cambiar la foto del reporte | espera: Lo que reportó el visitante no se modifica
+-- FALLA
+UPDATE reportes_visitantes SET foto = X'FFD8FF00FFD9' WHERE id = 1;
+
+-- PRUEBA: cambiar el código del reporte | espera: Lo que reportó el visitante no se modifica
+-- FALLA
+UPDATE reportes_visitantes SET codigo = 'UAM-ZZZZ-ZZZZ' WHERE id = 1;
+
+-- PRUEBA: un estudiante gestiona un reporte | espera: Solo el personal activo gestiona los reportes de visitantes
+-- FALLA
+UPDATE reportes_visitantes SET estado = 'Cerrado', actualizado_por = 4, fecha_actualizacion = '2026-11-01 10:00:00' WHERE id = 1;
+
+-- PRUEBA: la encargada desactivada gestiona un reporte | espera: Solo el personal activo gestiona los reportes de visitantes
+-- FALLA
+UPDATE reportes_visitantes SET observaciones = 'Revisado', actualizado_por = 10, fecha_actualizacion = '2026-11-01 10:00:00' WHERE id = 1;
+
+-- PRUEBA: estado de reporte inventado | espera: CHECK constraint failed
+-- FALLA
+UPDATE reportes_visitantes SET estado = 'Perdido', actualizado_por = 2, fecha_actualizacion = '2026-11-01 10:00:00' WHERE id = 1;
+
+-- PRUEBA: relacionar un objeto que no existe | espera: FOREIGN KEY constraint failed
+-- FALLA
+UPDATE reportes_visitantes SET objeto_id = 999, actualizado_por = 2, fecha_actualizacion = '2026-11-01 10:00:00' WHERE id = 1;
+
+-- PRUEBA: gestión con fecha anterior al reporte | espera: CHECK constraint failed
+-- FALLA
+UPDATE reportes_visitantes SET estado = 'Cerrado', actualizado_por = 2, fecha_actualizacion = '2026-10-01 10:00:00' WHERE id = 1;
+
+-- PRUEBA: «borrar» un intento fallido de WhatsApp | espera: Los intentos de WhatsApp solo aumentan
+-- FALLA
+UPDATE reportes_visitantes SET whatsapp_estado = 'Pendiente', whatsapp_intentos = 0 WHERE id = 1;
+
+-- PRUEBA: WhatsApp «Enviada» sin id del mensaje | espera: CHECK constraint failed
+-- FALLA
+UPDATE reportes_visitantes SET whatsapp_estado = 'Enviada', whatsapp_intentos = 2, whatsapp_detalle = NULL WHERE id = 1;
+
+-- PRUEBA: borrar un reporte de visitante | espera: Un reporte de visitante no se borra
+-- FALLA
+DELETE FROM reportes_visitantes WHERE id = 1;
