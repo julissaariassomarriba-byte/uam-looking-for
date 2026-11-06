@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icono, estado %}
+
+{% block titulo %}Reporte {{ r.codigo }} | UAM Looking For{% endblock %}
+
+{% block contenido %}
+<div class="titulo-pagina">
+    <h2>Reporte {{ r.codigo }}</h2>
+    <a href="{{ url_for('reportes_visitantes') }}" class="enlace-volver">{{ icono('flecha_izq') }} Volver a los reportes</a>
+</div>
+
+<div class="detalle">
+    <section class="panel">
+        <a href="{{ url_for('foto_reporte_visitante', id=r.id) }}" target="_blank" class="foto-detalle" title="Ver la foto en tamaño completo">
+            <img src="{{ url_for('foto_reporte_visitante', id=r.id) }}" alt="Foto que subió el visitante">
+        </a>
+        <div class="detalle-encabezado">
+            <span class="figurita grande">{{ icono(categorias.get(r.categoria, 'paquete')) }}</span>
+            <div>
+                <h3>{{ r.objeto_nombre }}</h3>
+                <span class="badge reporte-{{ estados_reporte[r.estado] }}">{{ r.estado }}</span>
+            </div>
+        </div>
+        <dl class="datos">
+            <dt>Categoría</dt><dd>{{ r.categoria }}</dd>
+            <dt>Descripción</dt><dd>{{ r.descripcion }}</dd>
+            <dt>Dónde lo perdió</dt><dd>{{ r.lugar_perdida }}</dd>
+            <dt>Cuándo</dt><dd>{{ r.fecha_perdida }}</dd>
+            <dt>Reportado</dt><dd>{{ r.fecha_registro }}</dd>
+            <dt>Última gestión</dt><dd>{{ r.fecha_actualizacion ~ ' · ' ~ r.actualizado_por_nombre if r.fecha_actualizacion else 'Sin gestionar todavía' }}</dd>
+        </dl>
+
+        <h4>{{ icono('usuario') }} Visitante</h4>
+        <dl class="mini-datos tarjeta-retiro">
+            <dt>Nombre</dt><dd>{{ r.nombre }}</dd>
+            <dt>Teléfono</dt><dd>{{ r.telefono }}</dd>
+            <dt>Correo</dt><dd>{{ r.correo or '—' }}</dd>
+        </dl>
+        <div class="acciones-fila">
+            <a href="{{ contacto.llamar }}" class="btn btn-mini btn-claro">{{ icono('mano') }} Llamar</a>
+            <a href="{{ contacto.whatsapp }}" target="_blank" rel="noopener" class="btn btn-mini btn-claro">{{ icono('info') }} Escribir por WhatsApp</a>
+            {% if contacto.correo %}<a href="{{ contacto.correo }}" class="btn btn-mini btn-claro">{{ icono('bandeja') }} Enviar correo</a>{% endif %}
+        </div>
+        <p class="nota-privada">{{ icono('privado') }} El visitante no ve su teléfono, su correo ni las observaciones internas al consultar su reporte.</p>
+    </section>
+
+    <section class="panel">
+        <h4>Estado del reporte</h4>
+        <form method="POST" class="form-compacto">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="accion" value="gestionar">
+            <label for="estado">Estado</label>
+            <select id="estado" name="estado">
+                {% for e in estados_reporte %}<option {{ 'selected' if r.estado == e }}>{{ e }}</option>{% endfor %}
+            </select>
+            <label for="observaciones">Observaciones internas</label>
+            <textarea id="observaciones" name="observaciones" rows="4" maxlength="2000"
+                      placeholder="Qué se revisó, a quién se llamó… (el visitante no las ve)">{{ r.observaciones or '' }}</textarea>
+            <button type="submit" class="btn btn-secundario">Guardar cambios</button>
+        </form>
+
+        <h4>{{ icono('paquete') }} Objeto relacionado</h4>
+        {% if r.objeto_id %}
+            <p class="tarjeta-retiro"><a href="{{ url_for('detalle', id=r.objeto_id) }}">#{{ r.objeto_id }} {{ r.objeto_titulo }}</a>
+                {{ estado(r.objeto_estado) }} <span class="texto-suave">· se guarda en {{ r.objeto_ubicacion }}</span></p>
+        {% else %}
+            <p class="texto-suave">Todavía no se relacionó con ningún objeto encontrado.</p>
+        {% endif %}
+        {% if coincidencias %}
+            <p class="texto-suave">Posibles coincidencias: misma categoría, bajo custodia y encontradas desde el {{ r.fecha_perdida }}.</p>
+            <ul class="lista-coincidencias">
+                {% for o in coincidencias %}
+                    <li>
+                        <span><a href="{{ url_for('detalle', id=o.id) }}" target="_blank">#{{ o.id }} {{ o.titulo }}</a>
+                            <span class="texto-suave">· {{ o.fecha }} · {{ o.lugar_encontrado }}</span></span>
+                        {% if o.id != r.objeto_id %}
+                            <form method="POST" class="form-en-linea">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="accion" value="relacionar">
+                                <input type="hidden" name="objeto_id" value="{{ o.id }}">
+                                <button type="submit" class="btn btn-mini btn-claro">Relacionar</button>
+                            </form>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="texto-suave">No hay objetos bajo custodia de la misma categoría encontrados desde esa fecha.</p>
+        {% endif %}
+        <form method="POST" class="fila-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="accion" value="relacionar">
+            <select name="objeto_id" aria-label="Relacionar con un objeto">
+                <option value="">— Sin objeto relacionado —</option>
+                {% for o in objetos %}<option value="{{ o.id }}" {{ 'selected' if o.id == r.objeto_id }}>#{{ o.id }} {{ o.titulo }} · {{ o.categoria }} · {{ o.estado }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn">Guardar</button>
+        </form>
+
+        <h4>Aviso por WhatsApp al encargado</h4>
+        <p><span class="badge whatsapp-{{ r.whatsapp_estado|lower|replace(' ', '-') }}">{{ r.whatsapp_estado }}</span>
+            <span class="texto-suave">{{ r.whatsapp_intentos }} intento(s){{ ' · último: ' ~ r.whatsapp_fecha if r.whatsapp_fecha }}</span></p>
+        {% if whatsapp_falta %}
+            <p class="texto-suave">WhatsApp no está configurado: falta {{ whatsapp_falta|join(', ') }} en el archivo .env (ver README).</p>
+        {% elif r.whatsapp_detalle %}
+            <p class="texto-suave">{{ 'Id del mensaje en WhatsApp: ' if r.whatsapp_estado == 'Enviada' else 'Motivo: ' }}{{ r.whatsapp_detalle }}</p>
+        {% endif %}
+        {% if r.whatsapp_estado != 'Enviada' %}
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="accion" value="whatsapp">
+                <button type="submit" class="btn btn-claro">{{ icono('historial') }} Reintentar envío</button>
+            </form>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

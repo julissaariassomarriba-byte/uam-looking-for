@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icono %}
+
+{% block titulo %}Seguimiento de tu reporte | UAM Looking For{% endblock %}
+
+{% block contenido %}
+<div class="titulo-pagina">
+    <h2>{{ '¡Reporte registrado!' if nuevo else 'Seguimiento de tu reporte' }}</h2>
+    <a href="{{ url_for('visitante') }}" class="enlace-volver">{{ icono('flecha_izq') }} Inicio de visitantes</a>
+</div>
+
+{% if nuevo %}
+<section class="panel confirmacion-reporte">
+    <p>Gracias, {{ r.nombre }}. Tu reporte quedó guardado y el encargado de objetos perdidos ya puede revisarlo.</p>
+    <span class="etiqueta-campo">Tu código de reporte</span>
+    <p class="codigo-reporte">{{ r.codigo }}</p>
+    <p class="texto-suave">Guárdalo: para consultar tu reporte te pediremos este código y el teléfono que escribiste.</p>
+    <label for="enlace-privado" class="etiqueta-campo">También puedes guardar este enlace privado (no lo compartas)</label>
+    <div class="fila-form">
+        <input type="text" id="enlace-privado" value="{{ enlace }}" readonly>
+        <button type="button" class="btn btn-claro" data-copiar="enlace-privado">Copiar enlace</button>
+    </div>
+</section>
+{% endif %}
+
+{% include 'visitante_estado.html' %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Copia el enlace privado (si el navegador no deja usar el portapapeles, lo deja seleccionado).
+    document.querySelectorAll('[data-copiar]').forEach(boton => boton.addEventListener('click', async () => {
+        const campo = document.getElementById(boton.dataset.copiar);
+        campo.select();
+        try { await navigator.clipboard.writeText(campo.value); boton.textContent = 'Copiado'; }
+        catch (e) { boton.textContent = 'Selecciónalo y cópialo'; }
+    }));
+</script>
+{% endblock %}

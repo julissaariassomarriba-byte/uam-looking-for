@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icono, zona_foto %}
+
+{% block titulo %}Reportar objeto perdido | UAM Looking For{% endblock %}
+
+{% block contenido %}
+<div class="panel formulario">
+    <h2>Reportar un objeto perdido</h2>
+    <p class="texto-suave intro-seccion">No necesitas cuenta. Los campos con * son obligatorios. Al enviar el reporte recibirás un código
+        para consultar su estado. <a href="{{ url_for('visitante') }}">Volver al inicio de visitantes</a></p>
+    <form method="POST" enctype="multipart/form-data" data-un-envio>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="envio" value="{{ envio }}">
+
+        <fieldset class="paso-form">
+            <legend><span class="paso-numero">1</span> Tus datos de contacto</legend>
+            <div class="form-grid">
+                <div class="ancho-completo">
+                    <label for="nombre">Nombre completo *</label>
+                    <input type="text" id="nombre" name="nombre" value="{{ datos.get('nombre', '') }}" required minlength="3" maxlength="100"
+                           autocomplete="name" placeholder="Ej. Pedro Gómez">
+                </div>
+                <div>
+                    <label for="telefono">Teléfono *</label>
+                    <input type="tel" id="telefono" name="telefono" value="{{ datos.get('telefono', '') }}" required maxlength="30"
+                           autocomplete="tel" placeholder="Ej. 8888 8888">
+                </div>
+                <div>
+                    <label for="correo">Correo <span class="texto-suave">(opcional)</span></label>
+                    <input type="email" id="correo" name="correo" value="{{ datos.get('correo', '') }}" maxlength="120"
+                           autocomplete="email" placeholder="Ej. nombre@correo.com">
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset class="paso-form">
+            <legend><span class="paso-numero">2</span> ¿Qué objeto perdiste?</legend>
+            <div class="form-grid">
+                <div>
+                    <label for="objeto_nombre">Nombre del objeto *</label>
+                    <input type="text" id="objeto_nombre" name="objeto_nombre" value="{{ datos.get('objeto_nombre', '') }}" required
+                           minlength="3" maxlength="100" placeholder="Ej. Mochila azul, celular">
+                </div>
+                <div>
+                    <label for="categoria">Categoría *</label>
+                    <select id="categoria" name="categoria" required>
+                        <option value="">Elige…</option>
+                        {% for nombre in categorias %}<option value="{{ nombre }}" {{ 'selected' if datos.get('categoria') == nombre }}>{{ nombre }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="ancho-completo">
+                    <label for="descripcion">Descripción detallada *</label>
+                    <textarea id="descripcion" name="descripcion" rows="4" required minlength="15" maxlength="1000"
+                              placeholder="Color, marca, tamaño, contenido, stickers, marcas o daños… lo que ayude a reconocerlo.">{{ datos.get('descripcion', '') }}</textarea>
+                </div>
+                <div class="ancho-completo subir-foto">
+                    <label for="foto">Fotografía del objeto *</label>
+                    {{ zona_foto('Obligatoria. Si no tienes una foto del objeto, sube una de uno parecido. Se reduce sola antes de enviarse (máx. 1280 px y 300 KB).', requerida=true) }}
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset class="paso-form">
+            <legend><span class="paso-numero">3</span> ¿Dónde y cuándo lo perdiste?</legend>
+            <div class="form-grid">
+                <div>
+                    <label for="lugar_perdida">Lugar dentro de la universidad *</label>
+                    <input type="text" id="lugar_perdida" name="lugar_perdida" value="{{ datos.get('lugar_perdida', '') }}" required
+                           minlength="3" maxlength="150" placeholder="Ej. Cafetería, Edificio C, parqueo">
+                </div>
+                <div>
+                    <label for="fecha_perdida">Fecha de pérdida *</label>
+                    <input type="date" id="fecha_perdida" name="fecha_perdida" value="{{ datos.get('fecha_perdida') or hoy }}" max="{{ hoy }}" required>
+                </div>
+            </div>
+        </fieldset>
+
+        <p class="nota-privada">{{ icono('privado') }} Tu teléfono y tu correo solo los ve el personal de objetos perdidos, para contactarte.</p>
+        <button type="submit" class="btn">{{ icono('check') }} Enviar reporte</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}{% include 'foto_script.html' %}{% endblock %}

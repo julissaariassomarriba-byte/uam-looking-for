@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icono %}
+
+{% block titulo %}Consultar mi reporte | UAM Looking For{% endblock %}
+
+{% block contenido %}
+<div class="titulo-pagina">
+    <h2>Consultar mi reporte</h2>
+    <a href="{{ url_for('visitante') }}" class="enlace-volver">{{ icono('flecha_izq') }} Volver</a>
+</div>
+
+<section class="panel formulario consulta-reporte">
+    <p class="texto-suave">Escribe el código que recibiste al reportar y el mismo teléfono que diste. Pedimos los dos para que nadie
+        pueda ver un reporte ajeno con solo adivinar un código.</p>
+    <form method="POST" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div>
+            <label for="codigo">Código del reporte *</label>
+            <input type="text" id="codigo" name="codigo" value="{{ datos.get('codigo', '') }}" required maxlength="20"
+                   placeholder="UAM-XXXX-XXXX" autocapitalize="characters" autocomplete="off">
+        </div>
+        <div>
+            <label for="telefono">Teléfono *</label>
+            <input type="tel" id="telefono" name="telefono" value="{{ datos.get('telefono', '') }}" required maxlength="30"
+                   placeholder="Ej. 8888 8888" autocomplete="tel">
+        </div>
+        <button type="submit" class="btn">{{ icono('lupa') }} Consultar</button>
+    </form>
+</section>
+
+{% if r %}{% include 'visitante_estado.html' %}{% endif %}
+{% endblock %}

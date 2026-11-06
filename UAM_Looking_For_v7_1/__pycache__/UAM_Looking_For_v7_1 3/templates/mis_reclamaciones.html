@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icono %}
+
+{% block contenido %}
+<div class="titulo-pagina">
+    <h2>Mis reclamaciones</h2>
+    <a href="{{ url_for('inicio') }}" class="enlace-volver">{{ icono('flecha_izq') }} Volver al catálogo</a>
+</div>
+
+<div class="lista-reclamos">
+    {% for r in reclamaciones %}
+    {% set avance = {'Por recuperar': 2, 'Recuperado': 3, 'Devuelto': 4}.get(r.objeto_estado, 2) if r.estado == 'Aceptada' else (1 if r.estado == 'Pendiente' else 0) %}
+    <article class="panel reclamo reclamo-{{ r.estado|lower }}">
+        <header class="reclamo-cabecera">
+            <div>
+                <a href="{{ url_for('detalle', id=r.objeto_id) }}" class="reclamo-objeto">{{ icono(categorias.get(r.categoria, 'paquete')) }} {{ r.titulo }}</a>
+                <p class="texto-suave">Reclamación #{{ r.id }} · {{ r.fecha_solicitud }}</p>
+            </div>
+            <span class="badge reclamacion-{{ r.estado|lower }}">{{ 'Devuelto' if r.entregado_a_mi else r.estado }}</span>
+        </header>
+
+        {% if avance %}
+            <ol class="progreso">
+                {% for paso in ['Enviada', 'Aceptada', 'Recuperado', 'Devuelto'] %}
+                    <li class="{{ 'hecho' if loop.index <= avance }}">{{ paso }}</li>
+                {% endfor %}
+            </ol>
+        {% endif %}
+
+        <p class="reclamo-nota">
+            {% if r.entregado_a_mi %}Ya recibiste el objeto el {{ r.fecha_devolucion }}.
+            {% elif r.estado == 'Pendiente' %}El encargado está comparando tus señas con el registro.
+            {% elif r.estado == 'Aceptada' and r.objeto_estado == 'Por recuperar' %}<strong>Tenías razón.</strong> El encargado está recuperando el objeto; te avisará para que lo retires con tu carné.
+            {% elif r.estado == 'Aceptada' and r.objeto_estado == 'Recuperado' %}<strong>Tu objeto ya está listo.</strong> Retíralo{{ ' en ' ~ r.ubicacion if r.ubicacion }} con tu carné.
+            {% elif r.estado == 'Rechazada' %}No se pudo comprobar que el objeto fuera tuyo.
+            {% else %}Cancelaste esta reclamación.{% endif %}
+            {% if r.respuesta and r.estado != 'Cancelada' %}<br><span class="texto-suave">Nota del encargado: {{ r.respuesta }}</span>{% endif %}
+        </p>
+
+        {% if r.estado == 'Pendiente' %}
+            <form method="POST" action="{{ url_for('cancelar_reclamacion', id=r.id) }}" class="acciones-fila"
+                  onsubmit="return confirm('¿Cancelar esta reclamación?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-mini btn-claro">Cancelar reclamación</button>
+            </form>
+        {% endif %}
+    </article>
+    {% else %}
+        <p class="panel vacio">No tienes reclamaciones. Si un objeto tuyo aparece como «Entregado», ábrelo y usa «¿Era tuyo?».</p>
+    {% endfor %}
+</div>
+{% endblock %}

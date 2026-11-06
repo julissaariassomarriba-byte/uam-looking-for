@@ -1,0 +1,44 @@
+{% from 'macros.html' import icono %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1e293b">
+    <meta name="robots" content="noindex">
+    <title>Panel de administración | UAM Looking For</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body class="pagina-acceso pagina-admin">
+    <main class="acceso-tarjeta acceso-admin">
+        <div class="acceso-logo">
+            <div class="logo-marca">{{ icono('escudo') }}</div>
+            <div class="logo-texto">
+                <span class="logo-pastilla">UAM</span>
+                <span class="logo-sub">ADMIN</span>
+            </div>
+        </div>
+        <p class="acceso-eslogan">PANEL DE ADMINISTRACIÓN · LOOKING FOR</p>
+
+        <h1 class="acceso-titulo">Acceso restringido</h1>
+        <p class="acceso-aviso">Solo el <strong>administrador autorizado</strong> puede ingresar, con el usuario y la contraseña configurados en el archivo <strong>.env</strong> del servidor. Desde aquí se registran, editan y desactivan las cuentas del sistema.</p>
+
+        {% for categoria, mensaje in get_flashed_messages(with_categories=true) %}
+            <div class="alerta {{ categoria }}">{{ mensaje }}</div>
+        {% endfor %}
+
+        {% if not env_listo %}
+            <div class="alerta error">No se encontró la cuenta de administrador. Crea el archivo <strong>.env</strong> en la carpeta del proyecto con ADMIN_USUARIO y ADMIN_CONTRASENA.</div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('admin_panel') }}" class="acceso-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="campo">{{ icono('usuario') }}<input type="text" name="cif" placeholder="Usuario de administrador" aria-label="Usuario" required autocomplete="username"></div>
+            <div class="campo">{{ icono('candado') }}<input type="password" name="contrasena" placeholder="Contraseña" aria-label="Contraseña" required autocomplete="current-password"></div>
+            <button type="submit" class="btn btn-bloque btn-admin">Entrar al panel</button>
+        </form>
+
+        <p class="acceso-volver"><a href="{{ url_for('login') }}">{{ icono('flecha_izq') }} Volver al inicio de sesión general</a></p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,53 @@
+{# Tarjeta de una reclamación para el personal. Variables: r (la reclamación) y en_detalle (ya se está viendo el objeto). #}
+{% from 'macros.html' import icono %}
+<article class="panel reclamo reclamo-{{ r.estado|lower }}">
+    <header class="reclamo-cabecera">
+        <div>
+            {% if not en_detalle %}
+                <a href="{{ url_for('detalle', id=r.objeto_id) }}" class="reclamo-objeto">{{ icono(categorias.get(r.categoria, 'paquete')) }} #{{ r.objeto_id }} {{ r.titulo }}</a>
+            {% endif %}
+            <p class="texto-suave">Reclamación #{{ r.id }} · {{ r.fecha_solicitud }}</p>
+        </div>
+        <span class="badge reclamacion-{{ r.estado|lower }}">{{ r.estado }}</span>
+    </header>
+
+    <div class="reclamo-cuerpo">
+        <section>
+            <h5>{{ icono('usuario') }} Quien reclama</h5>
+            <p class="reclamo-persona"><strong>{{ r.usuario_nombre }}</strong> · CIF {{ r.usuario_cif }}<br>
+                <a href="mailto:{{ r.usuario_correo }}">{{ r.usuario_correo }}</a>{{ ' · ' ~ r.usuario_telefono if r.usuario_telefono }}</p>
+            <blockquote>{{ r.descripcion }}</blockquote>
+            <dl class="mini-datos">
+                <dt>Dónde</dt><dd>{{ r.lugar_perdida or '—' }}</dd>
+                <dt>Cuándo</dt><dd>{{ r.fecha_perdida or '—' }}</dd>
+            </dl>
+            {% if not en_detalle and r.estado == 'Pendiente' %}
+                <a href="{{ url_for('detalle', id=r.objeto_id) }}" class="btn btn-mini btn-claro">{{ icono('privado') }} Ver registro del objeto</a>
+            {% endif %}
+        </section>
+    </div>
+
+    {% if r.estado == 'Pendiente' %}
+        <form method="POST" action="{{ url_for('gestionar_reclamacion', id=r.id) }}" class="reclamo-acciones">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="volver" value="{{ request.full_path if request.query_string else request.path }}">
+            <input type="text" name="nota" aria-label="Nota" placeholder="Nota para quien reclama (obligatoria si rechazas)">
+            <button type="submit" name="accion" value="aceptar" class="btn btn-aprobar">{{ icono('check') }} Aceptar y recuperar</button>
+            <button type="submit" name="accion" value="rechazar" class="btn btn-rechazar">{{ icono('equis') }} Rechazar</button>
+        </form>
+    {% elif r.estado == 'Aceptada' %}
+        <p class="reclamo-nota">{{ icono('info') }} Aceptada el {{ r.fecha_resolucion }} por {{ r.resuelto_por_nombre }}.
+            {{ 'Recupera el objeto de ' ~ r.retiro_nombre ~ ' (tel. ' ~ r.retiro_telefono ~ ')' if r.objeto_estado == 'Por recuperar' else 'Recuperado de ' ~ r.retiro_nombre }}{{ ' — ' ~ r.respuesta if r.respuesta }}.</p>
+        {% if r.objeto_estado == 'Por recuperar' %}
+            <a href="{{ url_for('detalle', id=r.objeto_id) }}" class="btn btn-mini btn-claro">{{ icono('historial') }} Registrar recuperación</a>
+        {% elif r.objeto_estado == 'Recuperado' %}
+            <a href="{{ url_for('detalle', id=r.objeto_id) }}" class="btn btn-mini btn-claro">{{ icono('mano') }} Devolver a {{ r.usuario_nombre }}</a>
+        {% elif r.entregado_a_mi %}
+            <p class="reclamo-nota">{{ icono('check') }} Devuelto a {{ r.usuario_nombre }} el {{ r.fecha_devolucion }} por {{ r.devuelto_por_nombre }}.</p>
+        {% endif %}
+    {% elif r.estado == 'Rechazada' %}
+        <p class="reclamo-nota">Rechazada el {{ r.fecha_resolucion }} por {{ r.resuelto_por_nombre or 'Sistema' }}{{ ' — ' ~ r.respuesta if r.respuesta }}</p>
+    {% else %}
+        <p class="reclamo-nota">Cancelada por el estudiante el {{ r.fecha_resolucion }}.</p>
+    {% endif %}
+</article>

@@ -1,0 +1,28 @@
+{# Estado de un reporte para el visitante. r = logica.vista_publica(): sin teléfono, correo ni observaciones internas. #}
+{% from 'macros.html' import icono %}
+{% set pasos = ['Pendiente', 'En revisión', 'Localizado', 'Resuelto'] %}
+<article class="panel estado-reporte">
+    <header class="reclamo-cabecera">
+        <div>
+            <p class="texto-suave">Reporte {{ r.codigo }}</p>
+            <h3 class="reclamo-objeto">{{ icono(categorias.get(r.categoria, 'paquete')) }} {{ r.objeto_nombre }}</h3>
+            <p class="texto-suave">{{ r.categoria }} · perdido el {{ r.fecha_perdida }}</p>
+        </div>
+        <span class="badge reporte-{{ estados_reporte[r.estado] }}">{{ r.estado }}</span>
+    </header>
+    {% if r.estado != 'Cerrado' %}
+        <ol class="progreso">
+            {% for paso in pasos %}<li class="{{ 'hecho' if loop.index <= pasos.index(r.estado) + 1 }}">{{ paso }}</li>{% endfor %}
+        </ol>
+    {% endif %}
+    <p class="reclamo-nota">
+        {% if r.estado == 'Pendiente' %}Recibimos tu reporte, {{ r.nombre }}. El encargado de objetos perdidos lo revisará pronto.
+        {% elif r.estado == 'En revisión' %}El encargado está buscando tu objeto entre los que se han entregado en la universidad.
+        {% elif r.estado == 'Localizado' %}<strong>¡Encontramos un objeto que coincide con tu reporte!</strong> Acércate a
+            {{ r.retiro or 'la oficina de objetos perdidos' }} con tu cédula y este código para confirmarlo y retirarlo.
+        {% elif r.estado == 'Resuelto' %}Tu reporte quedó resuelto. ¡Gracias por usar UAM Looking For!
+        {% else %}Este reporte se cerró sin encontrar el objeto. Si tienes más información, acércate a la oficina de objetos
+            perdidos con este código.{% endif %}
+    </p>
+    <p class="texto-suave">Reportado el {{ r.fecha_registro }}{{ ' · última actualización: ' ~ r.fecha_actualizacion if r.fecha_actualizacion }}</p>
+</article>

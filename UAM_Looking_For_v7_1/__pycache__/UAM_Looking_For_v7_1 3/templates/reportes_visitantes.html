@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import icono %}
+
+{% block titulo %}Reportes de visitantes | UAM Looking For{% endblock %}
+
+{% block contenido %}
+<div class="titulo-pagina">
+    <h2>Reportes de visitantes</h2>
+    <form method="GET" class="fila-form buscar-codigo" role="search">
+        {% if estado_actual %}<input type="hidden" name="estado" value="{{ estado_actual }}">{% endif %}
+        <input type="search" name="codigo" value="{{ codigo }}" maxlength="13" placeholder="Buscar por código (UAM-…)" aria-label="Buscar por código">
+        <button type="submit" class="btn">{{ icono('lupa') }} Buscar</button>
+    </form>
+</div>
+
+<nav class="pestanas" aria-label="Filtrar por estado">
+    <a href="{{ url_for('reportes_visitantes', codigo=codigo or None) }}" class="pestana {{ 'activa' if not estado_actual }}">
+        Todos <span class="contador">{{ conteo.values()|sum }}</span></a>
+    {% for e in estados_reporte %}
+        <a href="{{ url_for('reportes_visitantes', estado=e, codigo=codigo or None) }}" class="pestana {{ 'activa' if estado_actual == e }}">
+            {{ e }} <span class="contador">{{ conteo.get(e, 0) }}</span></a>
+    {% endfor %}
+</nav>
+
+<p class="texto-suave intro-seccion">Visitantes sin cuenta que perdieron algo en la universidad. Abre un reporte para ver la foto y los datos de
+    contacto, cambiar su estado o relacionarlo con un objeto encontrado.</p>
+
+<div class="lista-reclamos">
+    {% for r in reportes %}
+        <a href="{{ url_for('reporte_visitante', id=r.id) }}" class="panel reclamo tarjeta-reporte">
+            <header class="reclamo-cabecera">
+                <div>
+                    <span class="reclamo-objeto">{{ icono(categorias.get(r.categoria, 'paquete')) }} {{ r.objeto_nombre }}</span>
+                    <p class="texto-suave">{{ r.codigo }} · {{ r.fecha_registro }} · {{ r.nombre }}</p>
+                </div>
+                <span class="badge reporte-{{ estados_reporte[r.estado] }}">{{ r.estado }}</span>
+            </header>
+            <p class="texto-suave">Perdido en {{ r.lugar_perdida }} el {{ r.fecha_perdida }}
+                {%- if r.objeto_id %} · relacionado con el objeto #{{ r.objeto_id }}{% endif %} ·
+                WhatsApp: <span class="badge whatsapp-{{ r.whatsapp_estado|lower|replace(' ', '-') }}">{{ r.whatsapp_estado }}</span></p>
+        </a>
+    {% else %}
+        <p class="panel vacio">No hay reportes {{ 'con ese código' if codigo else 'en esta sección' }}.</p>
+    {% endfor %}
+</div>
+{% endblock %}
