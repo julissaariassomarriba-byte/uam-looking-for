@@ -253,7 +253,6 @@ a.item-lateral:hover { background: var(--fondo); }
 .casilla { display: flex; align-items: flex-start; gap: 0.5rem; font-weight: 400; font-size: 0.9rem; cursor: pointer; }
 .casilla input { width: auto; margin-top: 0.2rem; flex-shrink: 0; }
 .tarjeta-retiro { background: #f4f7fb; border: 1px solid var(--borde); border-radius: 3px; padding: 0.9rem 1rem; margin-bottom: 0.6rem; }
-.entrega-revertida { border-left: 3px solid var(--borde); padding-left: 0.6rem; margin-bottom: 0.4rem; }
 
 /* ---------- 7. Formularios de registro (objeto y cuenta) ---------- */
 .formulario { max-width: 56.25rem; margin: 0 auto; padding: 2.2rem 2.5rem; }
@@ -280,7 +279,21 @@ a.item-lateral:hover { background: var(--fondo); }
 .opcion-ubicacion input:checked + span { border-color: var(--primario); background: var(--primario-suave); color: var(--primario-oscuro); box-shadow: inset 0 0 0 1px var(--primario); }
 .opcion-ubicacion input:focus-visible + span { box-shadow: var(--foco); }
 .subir-foto { display: flex; flex-direction: column; gap: 0.5rem; }
-.subir-foto input[type=file] { padding: 0.6rem; background: var(--fondo); border-style: dashed; cursor: pointer; }
+.zona-foto { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 1.6rem 1rem; border: 2px dashed var(--primario); border-radius: 4px; background: var(--primario-suave); text-align: center; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.zona-foto:hover, .zona-foto.arrastrando { background: #d3ecee; border-color: var(--primario-oscuro); }
+.zona-foto.arrastrando { border-style: solid; }
+.zona-foto:focus-within { box-shadow: var(--foco); }
+.zona-foto-icono .icono { width: 2.6rem; height: 2.6rem; color: var(--primario); }
+.zona-foto-titulo { font-weight: 600; color: var(--texto); }
+.zona-foto-o { font-size: 0.9rem; color: var(--texto-suave); }
+.zona-foto .btn.zona-foto-boton { align-self: center; padding: 0.5rem 1.4rem; }   /* gana a «.formulario .btn» */
+.zona-foto-info { font-size: 0.88rem; }
+.zona-foto .vista-foto { align-self: center; max-height: 12rem; background: #fff; }
+.zona-foto.con-vista :is(.zona-foto-icono, .zona-foto-titulo, .zona-foto-o) { display: none; }
+.form-compacto .zona-foto { padding: 1.1rem 0.8rem; }
+.oculto-visual { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media (hover: none) { .solo-con-mouse { display: none; } }
+@media (max-width: 760px) { .zona-foto .btn.zona-foto-boton { align-self: stretch; } }   /* en celular, botón ancho para el dedo */
 .vista-foto { max-width: 100%; max-height: 16rem; object-fit: contain; align-self: flex-start; border: 1px solid var(--borde); border-radius: 3px; background: var(--fondo); }
 .tarjeta-portada.con-foto { position: relative; padding: 0; height: 11rem; background: var(--oscuro); }
 .tarjeta-portada.con-foto img { width: 100%; height: 100%; object-fit: cover; }
@@ -291,6 +304,7 @@ a.item-lateral:hover { background: var(--fondo); }
 /* ---------- 8. Historial y administración ---------- */
 .resumen-estados { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: 1rem; }
 .resumen-estados.tres { grid-template-columns: repeat(3, 1fr); }
+.resumen-estados.cuatro { grid-template-columns: repeat(4, 1fr); }
 .resumen-tarjeta { display: flex; align-items: center; gap: 1rem; padding: 1.3rem 1.4rem; border-left: 4px solid var(--primario); }
 .resumen-tarjeta > .icono { width: 2.125rem; height: 2.125rem; }
 .resumen-tarjeta div { display: flex; flex-direction: column; }
@@ -354,7 +368,7 @@ a.fila-simple:hover { background: #f8fbfb; }
 }
 .pagina-admin { background: linear-gradient(rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.9)), url("../img/fondo_edificio_a.jpg") center / cover fixed #0f172a; }
 
-.acceso-tarjeta { width: 100%; max-width: 430px; background: #fff; border-top: 4px solid var(--primario); border-radius: 2px; padding: 2.2rem 2rem 1.6rem; box-shadow: 0 18px 45px rgba(0, 0, 0, 0.4); text-align: center; }
+.acceso-tarjeta { width: 100%; max-width: 430px; background: #fff; border-top: 4px solid var(--primario); border-radius: 2px; padding: 1.8rem 2rem 1.3rem; box-shadow: 0 18px 45px rgba(0, 0, 0, 0.4); text-align: center; }
 .acceso-logo { display: flex; align-items: center; justify-content: center; gap: 0.6rem; }
 .logo-marca { width: 3.875rem; height: 3.875rem; border: 2px solid var(--primario); border-radius: 3px; color: var(--primario); display: inline-flex; align-items: center; justify-content: center; }
 .logo-marca .icono { width: 1.875rem; height: 1.875rem; }
@@ -365,18 +379,22 @@ a.fila-simple:hover { background: #f8fbfb; }
 .navbar .logo-pastilla { font-size: 1rem; padding: 0.05rem 0.45rem; background: rgba(255, 255, 255, 0.22); }
 .logo-sub { color: var(--primario); font-weight: 700; font-size: 1.2rem; letter-spacing: 1px; margin-top: 0.25rem; }
 
-.acceso-eslogan { color: var(--primario); font-size: 0.75rem; letter-spacing: 0.6px; margin: 0.6rem 0 1.2rem; }
+.acceso-eslogan { color: var(--primario); font-size: 0.75rem; letter-spacing: 0.6px; margin: 0.5rem 0 1rem; }
 .acceso-titulo { font-size: 1.1rem; margin-bottom: 0.7rem; }
-.acceso-aviso { text-align: left; font-size: 0.92rem; line-height: 1.55; color: #374151; margin-bottom: 1.2rem; }
+.acceso-aviso { font-size: 0.9rem; line-height: 1.5; color: #374151; margin-bottom: 1rem; }
 .acceso-form { gap: 0.8rem; }
 .campo { display: flex; align-items: center; gap: 0.3rem; border: 1px solid var(--borde); border-radius: 2px; padding: 0 0.75rem; color: var(--texto-suave); }
 .campo:focus-within { border-color: var(--primario); box-shadow: var(--foco); }
 .campo input { border: none; box-shadow: none !important; padding: 0.85rem 0.5rem; color: var(--texto); }
 .ver-clave { background: none; border: none; cursor: pointer; display: inline-flex; color: inherit; }
 
-.acceso-ayuda { text-align: left; background: #eef2f6; border-left: 3px solid var(--primario); padding: 1rem 1.1rem; margin-top: 1.4rem; }
-.acceso-ayuda h3 { font-size: 0.9rem; color: #1e3a5f; margin-bottom: 0.4rem; }
-.acceso-ayuda ul { padding-left: 1.1rem; font-size: 0.8rem; color: #1e3a5f; line-height: 1.55; }
+.acceso-separador { display: flex; align-items: center; gap: 0.7rem; margin: 1.1rem 0 0.7rem; color: var(--texto-suave); font-size: 0.85rem; }
+.acceso-separador::before, .acceso-separador::after { content: ""; flex: 1; border-top: 1px solid var(--borde); }
+.acceso-opciones { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.acceso-opciones .btn { justify-content: center; padding-left: 0.5rem; padding-right: 0.5rem; white-space: nowrap; }
+.acceso-ayuda { text-align: left; background: #eef2f6; border-left: 3px solid var(--primario); padding: 0.85rem 1rem; margin-top: 1.1rem; }
+.acceso-ayuda h3 { font-size: 0.9rem; color: #1e3a5f; margin-bottom: 0.35rem; }
+.acceso-ayuda ul { padding-left: 1.1rem; font-size: 0.8rem; color: #1e3a5f; line-height: 1.5; }
 
 .acceso-admin { border-top-color: var(--oscuro); }
 .acceso-admin .logo-marca { color: var(--oscuro); border-color: var(--oscuro); }
@@ -408,7 +426,7 @@ a.fila-simple:hover { background: #f8fbfb; }
     .navbar { padding: 0.9rem 1rem; }
     .catalogo, .detalle, .form-grid, .admin-cuentas, .guia, .panel-columnas, .datos { grid-template-columns: 1fr; }
     .barra-lateral { position: static; }
-    .resumen-estados, .resumen-estados.tres { grid-template-columns: repeat(2, 1fr); }
+    .resumen-estados, .resumen-estados.tres, .resumen-estados.cuatro { grid-template-columns: repeat(2, 1fr); }
     .datos dd { border-top: none; padding-top: 0; }
 }
 
@@ -479,4 +497,33 @@ a.fila-simple:hover { background: #f8fbfb; }
     .pagina-acceso { padding: 1rem 1rem; background-attachment: scroll; background-image: linear-gradient(rgba(8, 38, 44, 0.35), rgba(8, 38, 44, 0.55)), url("../img/fondo_edificio_a_movil.jpg"); }
     .pagina-admin { background-image: linear-gradient(rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.9)), url("../img/fondo_edificio_a_movil.jpg"); }
     .acceso-tarjeta { padding: 1.6rem 1.2rem 1.2rem; }
+}
+
+/* ---------- Visitantes y reportes de visitantes (v8.5) ---------- */
+.reporte-pendiente, .whatsapp-no-configurada { background: #fff3d6; color: #7a5600; }
+.reporte-revision { background: #dcedf9; color: #144e75; }
+.reporte-localizado, .whatsapp-enviada { background: #e6f5ee; color: #14613b; }
+.reporte-resuelto { background: #dff3f5; color: #005c69; }
+.reporte-cerrado, .whatsapp-pendiente { background: #eceff1; color: #546069; }
+.whatsapp-fallida { background: #fbe9e9; color: #8a1f1f; }
+.rol-borde-visitante { border-left-color: var(--morado); }
+.opciones-visitante { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; margin-bottom: 1.2rem; }
+.opcion-visitante { display: flex; flex-direction: column; align-items: flex-start; gap: 0.7rem; padding: 1.6rem; text-decoration: none; color: inherit; border-top: 4px solid var(--primario); transition: box-shadow 0.15s; }
+.opcion-visitante:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1); }
+.opcion-visitante h3 { color: var(--primario-oscuro); }
+.opcion-visitante .btn { margin-top: auto; }
+.tarjeta-reporte { display: flex; flex-direction: column; gap: 0.5rem; text-decoration: none; color: inherit; }
+.tarjeta-reporte:hover { border-color: var(--primario); }
+.buscar-codigo input { min-width: 14rem; }
+.confirmacion-reporte { display: flex; flex-direction: column; gap: 0.55rem; padding: 1.6rem; margin-bottom: 1.2rem; border-left: 4px solid var(--verde); }
+.codigo-reporte { font-family: ui-monospace, Consolas, "Courier New", monospace; font-size: 2rem; font-weight: 700; letter-spacing: 0.08em; color: var(--primario-oscuro); }
+.confirmacion-reporte .fila-form input { flex: 1; min-width: 0; }
+.estado-reporte { display: flex; flex-direction: column; gap: 0.9rem; padding: 1.5rem; }
+.consulta-reporte { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.2rem; }
+.lista-coincidencias { list-style: none; display: flex; flex-direction: column; gap: 0.45rem; margin-bottom: 0.8rem; }
+.lista-coincidencias li { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; flex-wrap: wrap; padding: 0.5rem 0.7rem; background: #f4f7fb; border: 1px solid var(--borde); border-radius: 3px; }
+@media (max-width: 760px) {
+    .opciones-visitante { grid-template-columns: 1fr; }
+    .buscar-codigo input { min-width: 0; flex: 1; }
+    .codigo-reporte { font-size: 1.6rem; }
 }
