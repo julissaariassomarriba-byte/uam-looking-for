@@ -1,4 +1,4 @@
-"""Validaciones de UAM Looking For v8.5 que la base de datos no puede hacer sola.
+"""Validaciones de UAM Looking For v9 que la base de datos no puede hacer sola.
 
 La base revisa QUÉ se guarda (roles de quien firma cada hecho, estados, fechas). Lo que no sabe es QUIÉN
 ESTÁ CONECTADO: eso lo revisa este módulo antes de cada operación. También calcula los hashes de las
@@ -49,8 +49,7 @@ PERMISOS = {
     'registrar_devolucion':  lambda u, x=None: u['rol'] in PERSONAL,
     'completar_devolucion':  lambda u, x=None: u['rol'] in PERSONAL,
     'presentar_reclamacion': lambda u, x=None: u['contrasena_hash'] is not None,
-    # solo el autor cancela su propia reclamación (la base no sabe quién pulsó el botón)
-    'cancelar_reclamacion':  lambda u, r=None: r is not None and r['usuario_id'] == u['id'],
+    # v9: ya no existe «cancelar_reclamacion» (la base también lo impide con trg_reclamacion_sin_cancelar)
     # v8.5: reportar como visitante no necesita cuenta (no pasa por aquí); gestionar el reporte es del personal
     'gestionar_reporte_visitante': lambda u, x=None: u['rol'] in PERSONAL,
 }
@@ -58,4 +57,5 @@ PERMISOS = {
 
 def puede(usuario, operacion, registro=None):
     """True si el usuario conectado puede hacer la operación. El usuario debe estar activo."""
-    return bool(usuario) and usuario['activo'] == 1 and PERMISOS[operacion](usuario, registro)
+    regla = PERMISOS.get(operacion)   # una operación que no existe nunca está permitida
+    return bool(usuario) and usuario['activo'] == 1 and regla is not None and regla(usuario, registro)

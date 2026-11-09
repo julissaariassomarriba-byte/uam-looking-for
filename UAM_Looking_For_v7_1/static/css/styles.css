@@ -69,8 +69,10 @@ h4:first-child { margin-top: 0; }
 .nav-marca { display: flex; align-items: center; gap: 0.7rem; color: #fff; text-decoration: none; font-weight: 700; font-size: 1.3rem; }
 
 #menu-principal { display: flex; align-items: center; flex-wrap: wrap; gap: 0.2rem; }
-#menu-principal a { display: inline-flex; align-items: center; gap: 0.45rem; color: #fff; text-decoration: none; font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 2px; }
-#menu-principal a:hover { background: var(--primario-oscuro); }
+#menu-principal a, .nav-salir button { display: inline-flex; align-items: center; gap: 0.45rem; color: #fff; text-decoration: none; font-weight: 600; padding: 0.5rem 0.75rem; border-radius: 2px; }
+#menu-principal a:hover, .nav-salir button:hover { background: var(--primario-oscuro); }
+.nav-salir { display: inline-flex; margin: 0; }
+.nav-salir button { background: none; border: none; font: inherit; font-weight: 600; cursor: pointer; }
 
 .nav-contador { background: #fff; color: var(--primario-oscuro); border-radius: 0.625rem; font-size: 0.72rem; padding: 0.05rem 0.45rem; font-weight: 700; }
 .nav-usuario { display: inline-flex; align-items: center; gap: 0.5rem; margin: 0 0.3rem; padding-left: 0.9rem; border-left: 1px solid rgba(255, 255, 255, 0.35); }
@@ -407,7 +409,7 @@ a.fila-simple:hover { background: #f8fbfb; }
 
 /* Escritorio con el menú del personal: se compacta para caber en una línea. */
 @media (min-width: 761px) and (max-width: 1520px) {
-    #menu-principal a { padding: 0.5rem 0.6rem; font-size: 0.93rem; }
+    #menu-principal a, .nav-salir button { padding: 0.5rem 0.6rem; font-size: 0.93rem; }
     .nav-nombre { display: none; }
     .nav-usuario { padding-left: 0.6rem; }
 }
@@ -446,7 +448,8 @@ a.fila-simple:hover { background: #f8fbfb; }
     .menu-abierto #menu-principal { display: flex; }
     .menu-abierto .nav-toggle-abrir { display: none; }
     .menu-abierto .nav-toggle-cerrar { display: inline; }
-    #menu-principal a { padding: 0.8rem 0.4rem; min-height: 2.75rem; }
+    #menu-principal a, .nav-salir button { padding: 0.8rem 0.4rem; min-height: 2.75rem; width: 100%; }
+    .nav-salir { display: flex; }
     .nav-usuario { order: -1; margin: 0.3rem 0 0.4rem; padding: 0.4rem; border-left: none; background: rgba(0, 0, 0, 0.12); flex-wrap: wrap; }
     .nav-nombre { display: inline; }
 

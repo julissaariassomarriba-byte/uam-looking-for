@@ -227,7 +227,7 @@ INSERT INTO reclamaciones (id, entrega_id, usuario_id, descripcion, fecha_solici
 -- FALLA
 UPDATE reclamaciones SET estado = 'Rechazada', fecha_resolucion = '2026-11-03 12:00:00', resuelto_por = 3 WHERE id = 10;
 
--- PRUEBA: una cancelación con encargado | espera: CHECK constraint failed
+-- PRUEBA: una cancelación con encargado (y desde la v9, cualquier cancelación) | espera: no se cancela
 INSERT INTO entregas (id, objeto_id, retirado_por, entregado_por, senas, fecha_entrega) VALUES (2, 2, 4, 3, 'Llavero rojo', '2026-11-03 10:00:00');
 INSERT INTO reclamaciones (id, entrega_id, usuario_id, descripcion, fecha_solicitud) VALUES (10, 2, 5, 'Son mías', '2026-11-03 11:00:00');
 -- FALLA
@@ -451,3 +451,9 @@ UPDATE reportes_visitantes SET whatsapp_estado = 'Enviada', whatsapp_intentos = 
 -- PRUEBA: borrar un reporte de visitante | espera: Un reporte de visitante no se borra
 -- FALLA
 DELETE FROM reportes_visitantes WHERE id = 1;
+
+-- PRUEBA: v9 · el dueño cancela su reclamación pendiente | espera: no se cancela
+INSERT INTO entregas (id, objeto_id, retirado_por, entregado_por, senas, fecha_entrega) VALUES (2, 2, 4, 3, 'Llavero rojo', '2026-11-03 10:00:00');
+INSERT INTO reclamaciones (id, entrega_id, usuario_id, descripcion, fecha_solicitud) VALUES (10, 2, 5, 'Son mías', '2026-11-03 11:00:00');
+-- FALLA
+UPDATE reclamaciones SET estado = 'Cancelada', fecha_resolucion = '2026-11-03 12:00:00' WHERE id = 10;

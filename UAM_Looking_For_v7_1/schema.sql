@@ -1,9 +1,11 @@
 -- =====================================================================
--- UAM Looking For v8.5 · Modelo de base de datos (SQLite 3.25 o superior)
+-- UAM Looking For v9 · Modelo de base de datos (SQLite 3.25 o superior)
 -- 7 tablas · 15 llaves foráneas · 1 vista · normalizado hasta 3FN
 -- Se puede ejecutar desde cero y más de una vez: IF NOT EXISTS no borra datos.
 -- v8.5 solo AGREGA la tabla reportes_visitantes (con su índice y sus triggers): en una base v7.1/v8 existente
 -- se crea al iniciar la app y las demás tablas no cambian.
+-- v9 solo AGREGA el trigger trg_reclamacion_sin_cancelar: las reclamaciones ya no se cancelan. Las que se
+-- cancelaron antes se conservan tal cual (por eso «Cancelada» sigue en el CHECK de la tabla).
 --
 -- Dónde vive cada regla:
 --   CHECK     -> lo que depende de una sola fila (formatos, fechas, coherencia entre columnas).
@@ -101,7 +103,7 @@ CREATE TABLE IF NOT EXISTS reclamaciones (
     fecha_solicitud  TEXT    NOT NULL CHECK (datetime(fecha_solicitud) IS fecha_solicitud),
     fecha_resolucion TEXT    CHECK (fecha_resolucion IS NULL OR datetime(fecha_resolucion) IS fecha_resolucion),
     resuelto_por     INTEGER REFERENCES usuarios (id) ON UPDATE RESTRICT ON DELETE RESTRICT,
-    -- Pendiente: sin resolver. Aceptada/Rechazada: la resolvió el personal. Cancelada: la cerró el propio dueño.
+    -- Pendiente: sin resolver. Aceptada/Rechazada: la resolvió el personal. Cancelada: la cerró el dueño (solo hasta v8.5).
     CHECK (estado <> 'Pendiente' OR (fecha_resolucion IS NULL AND resuelto_por IS NULL)),
     CHECK (estado NOT IN ('Aceptada', 'Rechazada') OR (fecha_resolucion IS NOT NULL AND resuelto_por IS NOT NULL)),
     CHECK (estado <> 'Cancelada' OR (fecha_resolucion IS NOT NULL AND resuelto_por IS NULL)),
@@ -441,6 +443,11 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS trg_reportes_visitantes_sin_borrar BEFORE DELETE ON reportes_visitantes
 BEGIN SELECT RAISE(ABORT, 'Un reporte de visitante no se borra: se cierra.'); END;
+
+-- v9: el dueño ya no puede cancelar (renunciar a) su reclamación; solo el personal la acepta o la rechaza.
+CREATE TRIGGER IF NOT EXISTS trg_reclamacion_sin_cancelar BEFORE UPDATE OF estado ON reclamaciones
+WHEN NEW.estado = 'Cancelada' AND OLD.estado <> 'Cancelada'
+BEGIN SELECT RAISE(ABORT, 'Una reclamación no se cancela: el personal la acepta o la rechaza.'); END;
 
 -- ---------------------------------------------------------------------
 -- Consulta de ejemplo: la vida de un objeto con su estado anterior, sin guardarlo dos veces.

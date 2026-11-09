@@ -47,10 +47,12 @@ INSERT INTO reclamaciones (id, entrega_id, usuario_id, descripcion, lugar_perdid
  (2, 1, 5, 'Es una calculadora gris que dejé en la biblioteca', 'Biblioteca', NULL, '2026-11-01 09:00:00'),
  (3, 1, 6, 'Creo que es la que perdí en clase', NULL, NULL, '2026-11-01 09:15:00');
 
--- Resoluciones: Rosa cancela; María rechaza a Carlos con motivo y acepta a Ana (el objeto pasa a «Por recuperar»).
-UPDATE reclamaciones SET estado = 'Cancelada', fecha_resolucion = '2026-11-01 10:00:00' WHERE id = 3;
+-- Resoluciones: María rechaza a Carlos con motivo; al aceptar a Ana rechaza también la de Rosa (solo una puede
+-- aceptarse) y el objeto pasa a «Por recuperar». Desde la v9 nadie cancela su propia reclamación.
 UPDATE reclamaciones SET estado = 'Rechazada', respuesta = 'Las señas no coinciden con el registro',
                          fecha_resolucion = '2026-11-02 08:00:00', resuelto_por = 2 WHERE id = 2;
+UPDATE reclamaciones SET estado = 'Rechazada', respuesta = 'Otra persona comprobó que el objeto era suyo.',
+                         fecha_resolucion = '2026-11-02 08:05:00', resuelto_por = 2 WHERE id = 3;
 UPDATE reclamaciones SET estado = 'Aceptada', respuesta = 'Coinciden las iniciales grabadas',
                          fecha_resolucion = '2026-11-02 08:05:00', resuelto_por = 2 WHERE id = 1;
 

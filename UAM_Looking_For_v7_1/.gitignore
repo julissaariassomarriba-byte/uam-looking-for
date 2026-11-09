@@ -1,3 +1,4 @@
+# Nunca subir a GitHub: claves del .env y datos reales de la base
 .env
 database.db
 database_respaldo_*.db

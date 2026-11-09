@@ -1,4 +1,4 @@
-"""Prueba el modelo v8.5 desde cero: esquema, datos, pruebas positivas, pruebas negativas, índices y diagrama.
+"""Prueba el modelo v9 desde cero: esquema, datos, pruebas positivas, pruebas negativas, índices y diagrama.
 Uso: python probar_bd.py   (solo usa la biblioteca estándar de Python)."""
 import html
 import os
@@ -47,14 +47,14 @@ def en_prueba(pasos):
 
 
 print('\n--- Pruebas positivas (deben funcionar) ---')
-ok('El esquema crea 7 tablas, 1 vista, 12 índices y 25 triggers, y se puede ejecutar dos veces',
-   objetos_bd == {'table': 7, 'view': 1, 'index': 12, 'trigger': 25}, objetos_bd)
+ok('El esquema crea 7 tablas, 1 vista, 12 índices y 26 triggers, y se puede ejecutar dos veces',
+   objetos_bd == {'table': 7, 'view': 1, 'index': 12, 'trigger': 26}, objetos_bd)
 ok('Los datos de prueba cargan sin errores', uno('SELECT COUNT(*) FROM usuarios') == 10 and uno('SELECT COUNT(*) FROM devoluciones') == 1)
 ok('integrity_check y foreign_key_check sin errores', uno('PRAGMA integrity_check') == 'ok' and not con.execute('PRAGMA foreign_key_check').fetchall())
 vida = [tuple(f) for f in con.execute("SELECT accion, usuario_id, estado_nuevo FROM historial WHERE objeto_id = 1 ORDER BY id")]
 ok('El historial de la calculadora lo escribieron los triggers, con el autor correcto de cada hecho', vida == [
     ('Registro', 2, 'En resguardo'), ('Entrega', 2, 'Entregado'), ('Reclamación', 4, None), ('Reclamación', 5, None),
-    ('Reclamación', 6, None), ('Reclamación cancelada', 6, None), ('Reclamación rechazada', 2, None),
+    ('Reclamación', 6, None), ('Reclamación rechazada', 2, None), ('Reclamación rechazada', 2, None),
     ('Reclamación aceptada', 2, 'Por recuperar'), ('Recuperación', 3, 'Recuperado'), ('Devolución', 2, 'Devuelto')], vida)
 lag = [tuple(f) for f in con.execute('''SELECT LAG(estado_nuevo) OVER (ORDER BY id), estado_nuevo FROM historial
                                         WHERE objeto_id = 1 AND estado_nuevo IS NOT NULL ORDER BY id''')]
@@ -141,8 +141,9 @@ u = {f['id']: dict(f) for f in con.execute('SELECT * FROM usuarios')}
 r1 = dict(con.execute('SELECT * FROM reclamaciones WHERE id = 1').fetchone())
 ok('Permisos: la encargada registra; el estudiante y la encargada desactivada no',
    rp.puede(u[2], 'registrar_objeto') and not rp.puede(u[4], 'registrar_objeto') and not rp.puede(u[10], 'registrar_objeto'))
-ok('Permisos: solo el autor cancela su reclamación; una persona sin cuenta no reclama',
-   rp.puede(u[4], 'cancelar_reclamacion', r1) and not rp.puede(u[5], 'cancelar_reclamacion', r1) and not rp.puede(u[7], 'presentar_reclamacion'))
+ok('Permisos: una persona sin cuenta no reclama; desde la v9 nadie cancela (no existe el permiso)',
+   rp.puede(u[4], 'presentar_reclamacion') and not rp.puede(u[7], 'presentar_reclamacion')
+   and not rp.puede(u[4], 'cancelar_reclamacion', r1))
 
 print('\n--- Pruebas negativas (deben ser rechazadas) ---')
 antes = [con.execute(f'SELECT * FROM {t}').fetchall() for t in TABLAS]
