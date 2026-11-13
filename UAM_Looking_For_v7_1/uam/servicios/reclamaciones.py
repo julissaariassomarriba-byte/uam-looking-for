@@ -66,6 +66,8 @@ def crear_reclamacion(objeto_id, usuario, descripcion, lugar_perdida, fecha_perd
             return False, 'Solo se pueden reclamar objetos que ya fueron entregados a otra persona.'
         if usuario['id'] == entrega['retirado_por']:
             return False, 'Tú retiraste este objeto; no puedes reclamarlo.'
+        if objeto['oculto']:
+            return False, 'El plazo para reclamar este objeto ya terminó. Acércate a la oficina de objetos perdidos.'
         if error:
             return False, error
         if reclamaciones.listar('Pendiente', objeto_id, usuario['id'], con=con):   # la base también lo impide (índice único)

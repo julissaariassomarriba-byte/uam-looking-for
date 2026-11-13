@@ -52,7 +52,7 @@ def usuarios_lista(id=None):
     rol = opcion('rol', (ROL_ADMIN, *ROLES_GESTIONABLES))
     busqueda = (request.args.get('q') or '').strip()[:100]
     return render_template('admin/admin_usuarios.html', usuarios=usuarios.listar_cuentas(rol, busqueda), rol_actual=rol,
-                           busqueda=busqueda, roles=ROLES_GESTIONABLES, datos=f)
+                           busqueda=busqueda, roles=ROLES_GESTIONABLES, datos=f, por_rol=usuarios.contar_cuentas_por_rol())
 
 
 @bp.route('/usuarios/<int:id>/estado', methods=['POST'])

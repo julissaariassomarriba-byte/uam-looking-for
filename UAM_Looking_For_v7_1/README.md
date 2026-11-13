@@ -1,4 +1,4 @@
-# UAM Looking For v9
+# UAM Looking For v9.1.01
 
 Sistema de objetos perdidos y encontrados del campus de la Universidad Americana (UAM).
 Hecho solo con **Flask**, **SQLite** (`sqlite3`, incluido en Python), **HTML** y **CSS**. No usa otras librerías:
@@ -8,6 +8,10 @@ La v9 reorganiza el código en un paquete (`uam/`) por capas, agrega la **valida
 registrado ya no se puede usar con el nombre de otra persona), revisa en el servidor todos los datos de los
 formularios y **elimina la cancelación de reclamaciones**. Los cambios están en `docs/CAMBIOS_v9.md`
 (y los de versiones anteriores en `docs/`).
+
+La **v9.1.01** agrega a la v9: **limpiar el historial** (solo el administrador, desde «Historial»), **ocultar del
+catálogo los objetos entregados** después de 5 días (`DIAS_OCULTAR` en el `.env`, de 3 a 7; el personal los ve en
+«Ocultos») y un **diseño más limpio**. Detalle en `docs/CAMBIOS_v9_1_01.md`.
 
 ## Ejecutar
 
@@ -53,7 +57,7 @@ WHATSAPP_TOKEN=...            (opcional: ver «WhatsApp»)
 |---|---|---|
 | Estudiante | /login | Ver el catálogo y la guía rápida, reclamar objetos ya entregados y ver «Mis reclamaciones» |
 | Encargado | /login | Recibir objetos (con foto y quién los trae), registrar entregas, mover objetos de ubicación, ver los datos privados, cambiar estados, aceptar o rechazar reclamaciones, ver el historial y descargar el PDF |
-| Administrador | /admin | Todo lo del encargado, además de crear, editar, desactivar y reactivar cuentas |
+| Administrador | /admin | Todo lo del encargado, además de crear, editar, desactivar y reactivar cuentas, y limpiar el historial |
 | Visitante (sin cuenta) | /visitante | Reportar un objeto perdido con foto y consultar el estado de su reporte |
 
 Los estudiantes pueden crear su propia cuenta con el botón «Crear cuenta», debajo de «Acceder» (/registro): nombre, CIF, correo y contraseña. Siempre reciben el rol Estudiante. Las cuentas de encargados las crea el administrador.
@@ -207,17 +211,18 @@ Siete tablas normalizadas hasta 3FN (`schema.sql`; la v8.5 solo agregó `reporte
 | devoluciones | La recuperación y la devolución al dueño de una reclamación aceptada (una por reclamación). |
 | historial | Una fila por acción: qué pasó, a qué objeto, quién, cuándo y en qué estado quedó. |
 | reportes_visitantes | Lo que reporta un visitante sin cuenta (con su foto), su estado, la gestión del personal, el objeto relacionado y el resultado real del aviso por WhatsApp. |
+| limpiezas_historial | Cada limpieza del historial: quién la hizo, qué rango borró (todo o lo anterior a una fecha), cuántos movimientos y cuándo. También es el permiso: el historial solo se puede borrar mientras hay una limpieza «En curso». |
 
 **Dónde vive cada regla:**
 - **CHECK** (una sola fila): fechas y horas válidas, textos no vacíos, toda cuenta tiene CIF y correo, foto JPEG/WebP de 300 KB o menos, un rechazo lleva motivo, quien trae el objeto no es quien lo registra.
-- **Triggers** (miran otra tabla): solo el personal activo registra, entrega, resuelve y devuelve; el estado del objeto coincide con lo registrado; no se reclama lo que uno mismo retiró; las fechas siguen el orden de los hechos; entregas, historial, reclamaciones y devoluciones no se borran; y el historial de los hechos se escribe solo.
+- **Triggers** (miran otra tabla): solo el personal activo registra, entrega, resuelve y devuelve; el estado del objeto coincide con lo registrado; no se reclama lo que uno mismo retiró; las fechas siguen el orden de los hechos; entregas, reclamaciones y devoluciones no se borran; el historial solo se borra dentro de una limpieza del administrador; y el historial de los hechos se escribe solo.
 - **Python** (`uam/servicios/`): lo que depende de quién está conectado, la validación cruzada de identidad (comparar nombres no se puede hacer bien en SQL) y el hash de las contraseñas.
 
 Las operaciones de varios pasos (entregar, aceptar una reclamación) se hacen en una sola transacción: si la base rechaza un paso, se deshace todo y se muestra el motivo.
 
 `database.db` no viene en el ZIP: la app la crea al iniciar. **Una base v7.1, v8 o v8.5 que ya tiene datos se actualiza
-sola** al iniciar la v9: todo el esquema usa `IF NOT EXISTS`, así que solo se agrega lo que falta (en una base v8.5, el
-trigger `trg_reclamacion_sin_cancelar`). Los datos no cambian (comprobado con una base v8.5 con datos). Igual haz un
+sola** al iniciar la v9.1.01: todo el esquema usa `IF NOT EXISTS`, así que solo se agrega lo que falta (en una base v9,
+la tabla `limpiezas_historial` con sus 3 triggers y su índice, y se reemplaza el trigger `trg_historial_sin_borrar`). Los datos no cambian (comprobado con una base v8.5 con datos). Igual haz un
 respaldo antes de actualizar.
 
 ### Migración

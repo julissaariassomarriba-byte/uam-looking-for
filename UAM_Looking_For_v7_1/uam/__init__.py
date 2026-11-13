@@ -13,7 +13,7 @@ import os
 from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
 
 from . import config
-from .datos import conexion, migrar, reclamaciones, usuarios, visitantes
+from .datos import conexion, migrar, objetos, reclamaciones, usuarios, visitantes
 from .rutas import acceso, admin, comun
 from .rutas import objetos as rutas_objetos
 from .rutas import reclamaciones as rutas_reclamaciones
@@ -52,6 +52,7 @@ def crear_app(ruta_env=None, ruta_bd=None):
     migrar.migrar_si_hace_falta(ruta_bd, ruta_esquema)
     conexion.crear_tablas()
     cuentas.sincronizar_admin(env)
+    objetos.configurar_plazo(env.get('DIAS_OCULTAR'))   # días que un objeto entregado sigue en el catálogo (3 a 7)
 
     registrar_seguridad(app)
     for modulo in (acceso, rutas_objetos, rutas_reclamaciones, rutas_visitantes, admin):
@@ -111,5 +112,6 @@ def variables_globales():
                 es_admin=comun.tiene_rol(config.ROL_ADMIN), es_encargado=personal, es_estudiante=estudiante,
                 pendientes=reclamaciones.contar_por_estado().get('Pendiente', 0) if personal else 0,
                 reportes_nuevos=visitantes.contar_por_estado().get('Pendiente', 0) if personal else 0,
+                objetos_ocultos=objetos.contar_ocultos() if personal else 0, dias_plazo=objetos.dias_plazo(),
                 por_retirar=reclamaciones.contar_por_retirar(g.usuario['id']) if estudiante else 0)
 

@@ -12,7 +12,7 @@ import reglas_python as rp  # noqa: E402
 # schema.sql es el mismo que usa la app: si no está en esta carpeta, se toma el de la carpeta del proyecto
 buscar = lambda nombre: next(r for r in (os.path.join(AQUI, nombre), os.path.join(AQUI, '..', nombre)) if os.path.exists(r))
 leer = lambda nombre: open(buscar(nombre), encoding='utf-8').read()
-TABLAS = ('usuarios', 'objetos', 'entregas', 'reclamaciones', 'devoluciones', 'historial', 'reportes_visitantes')
+TABLAS = ('usuarios', 'objetos', 'entregas', 'reclamaciones', 'devoluciones', 'historial', 'reportes_visitantes', 'limpiezas_historial')
 resultados = []
 
 
@@ -47,8 +47,8 @@ def en_prueba(pasos):
 
 
 print('\n--- Pruebas positivas (deben funcionar) ---')
-ok('El esquema crea 7 tablas, 1 vista, 12 índices y 26 triggers, y se puede ejecutar dos veces',
-   objetos_bd == {'table': 7, 'view': 1, 'index': 12, 'trigger': 26}, objetos_bd)
+ok('El esquema crea 8 tablas, 1 vista, 13 índices y 29 triggers, y se puede ejecutar dos veces',
+   objetos_bd == {'table': 8, 'view': 1, 'index': 13, 'trigger': 29}, objetos_bd)
 ok('Los datos de prueba cargan sin errores', uno('SELECT COUNT(*) FROM usuarios') == 10 and uno('SELECT COUNT(*) FROM devoluciones') == 1)
 ok('integrity_check y foreign_key_check sin errores', uno('PRAGMA integrity_check') == 'ok' and not con.execute('PRAGMA foreign_key_check').fetchall())
 vida = [tuple(f) for f in con.execute("SELECT accion, usuario_id, estado_nuevo FROM historial WHERE objeto_id = 1 ORDER BY id")]
@@ -182,7 +182,7 @@ ok('Ningún índice es el comienzo de otro (sería redundante)',
    not [a for a in completos for b in completos if a != b and a[0] == b[0] and b[1][:len(a[1])] == a[1]])
 
 print('\n--- Diagrama vs SQL ---')
-ruta = os.path.join(AQUI, 'UAM_Looking_For_BD_v8_5.drawio')
+ruta = os.path.join(AQUI, 'UAM_Looking_For_BD_v9_1_01.drawio')
 if os.path.exists(ruta):
     esperado = {}
     for t in TABLAS:
@@ -191,7 +191,7 @@ if os.path.exists(ruta):
         nn = {c[1]: c[3] for c in con.execute(f'PRAGMA table_info({t})')}
         for f in con.execute(f'PRAGMA foreign_key_list({t})'):
             esperado[(f[2], t, f[3])] = ('ERmandOne' if nn[f[3]] else 'ERzeroToOne', 'ERzeroToOne' if f[3] in uq else 'ERzeroToMany')
-    x = leer('UAM_Looking_For_BD_v8_5.drawio')
+    x = leer('UAM_Looking_For_BD_v9_1_01.drawio')
     dibujado = {}
     for m in re.finditer(r'value="([^"]*)" style="[^"]*startArrow=(\w+);[^"]*endArrow=(\w+);[^"]*" edge="1" parent="1" source="t_(\w+)" target="t_(\w+)"', x):
         col = re.search(r'<b>(\w+)</b>', html.unescape(m.group(1))).group(1)

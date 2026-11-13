@@ -1,68 +1,104 @@
 {% extends 'base.html' %}
 {% from 'parciales/macros.html' import icono %}
 
+{% macro plural(n, uno, varios) %}{{ n }} {{ uno if n == 1 else varios }}{% endmacro %}
+
 {% block titulo %}Panel de administración | UAM Looking For{% endblock %}
 
 {% block contenido %}
 <div class="titulo-pagina">
-    <h2>Panel de administración</h2>
-    <a href="{{ url_for('admin.usuarios_lista') }}" class="btn">{{ icono('usuarios') }} Gestionar cuentas</a>
+    <div>
+        <h2>Panel de administración</h2>
+        <p class="texto-suave subtitulo-pagina">Resumen del sistema y lo que necesita atención.</p>
+    </div>
+    <div class="acciones-titulo">
+        <a href="{{ url_for('admin.usuarios_lista') }}" class="btn">{{ icono('usuarios') }} Gestionar cuentas</a>
+    </div>
 </div>
 
-<div class="resumen-estados cuatro">
-    {% for rol, ic, plural in [('Estudiante', 'birrete', 'Estudiantes'), ('Encargado', 'escudo', 'Encargados')] %}
+{% if objetos_ocultos %}
+    <a href="{{ url_for('objetos.inicio', ocultos=1) }}" class="aviso-plazo aviso-enlace">{{ icono('info') }}
+        <span><strong>{{ objetos_ocultos }} {{ 'objeto ya se ocultó' if objetos_ocultos == 1 else 'objetos ya se ocultaron' }} del catálogo.</strong>
+            Los estudiantes ya no los ven; siguen guardados en «Ocultos».</span> <span class="aviso-ir">Ver →</span></a>
+{% endif %}
+
+<div class="metricas">
+    {% for rol, ic, plural_rol in [('Estudiante', 'birrete', 'Estudiantes'), ('Encargado', 'escudo', 'Encargados')] %}
         {% set datos = por_rol.get(rol, {'total': 0, 'activos': 0}) %}
-        <a href="{{ url_for('admin.usuarios_lista', rol=rol) }}" class="panel resumen-tarjeta tarjeta-enlace rol-borde-{{ rol|lower }}">
-            {{ icono(ic) }}
-            <div>
-                <span class="resumen-numero">{{ datos.total }}</span>
-                <span class="texto-suave">{{ plural }} · {{ datos.activos }} activa(s)</span>
-            </div>
+        <a href="{{ url_for('admin.usuarios_lista', rol=rol) }}" class="panel metrica tarjeta-enlace metrica-{{ rol|lower }}">
+            <span class="metrica-etiqueta">{{ plural_rol }}</span>
+            <span class="metrica-numero">{{ datos.total }}</span>
+            <span class="metrica-detalle">{{ plural(datos.activos, 'cuenta activa', 'cuentas activas') }}</span>
+            <span class="metrica-icono">{{ icono(ic) }}</span>
         </a>
     {% endfor %}
-    <a href="{{ url_for('objetos.inicio') }}" class="panel resumen-tarjeta tarjeta-enlace rol-borde-objetos">
-        {{ icono('paquete') }}
-        <div>
-            <span class="resumen-numero">{{ total_objetos }}</span>
-            <span class="texto-suave">Objetos · {{ por_estado.get('Entregado', 0) }} entregado(s) · {{ fotos.total }} foto(s), {{ (fotos.peso / 1048576)|round(1) }} MB</span>
-        </div>
+    <a href="{{ url_for('objetos.inicio') }}" class="panel metrica tarjeta-enlace metrica-objetos">
+        <span class="metrica-etiqueta">Objetos</span>
+        <span class="metrica-numero">{{ total_objetos }}</span>
+        <span class="metrica-detalle">{{ plural(fotos.total, 'foto', 'fotos') }} · {{ (fotos.peso / 1048576)|round(1) }} MB</span>
+        <span class="metrica-icono">{{ icono('paquete') }}</span>
     </a>
-    <a href="{{ url_for('visitantes.panel') }}" class="panel resumen-tarjeta tarjeta-enlace rol-borde-visitante">
-        {{ icono('usuario') }}
-        <div>
-            <span class="resumen-numero">{{ por_reporte.values()|sum }}</span>
-            <span class="texto-suave">Reportes de visitantes · {{ por_reporte.get('Pendiente', 0) }} pendiente(s)</span>
-        </div>
+    <a href="{{ url_for('visitantes.panel') }}" class="panel metrica tarjeta-enlace metrica-visitante">
+        <span class="metrica-etiqueta">Reportes de visitantes</span>
+        <span class="metrica-numero">{{ por_reporte.values()|sum }}</span>
+        <span class="metrica-detalle">{{ plural(por_reporte.get('Pendiente', 0), 'pendiente', 'pendientes') }}</span>
+        <span class="metrica-icono">{{ icono('usuario') }}</span>
     </a>
 </div>
 
 <div class="panel-columnas">
-    <section>
-        <h3 class="subtitulo">Reclamaciones pendientes ({{ reclamaciones_pendientes|length }})</h3>
-        <div class="panel lista-simple">
+    <div class="columna-apilada">
+        <section class="panel bloque">
+            <header class="bloque-cabecera">
+                <h3>Reclamaciones pendientes <span class="contador">{{ reclamaciones_pendientes|length }}</span></h3>
+                {% if reclamaciones_pendientes %}<a href="{{ url_for('reclamaciones.lista') }}" class="enlace-vertodo">Revisar →</a>{% endif %}
+            </header>
             {% for r in reclamaciones_pendientes[:6] %}
-                <a href="{{ url_for('reclamaciones.lista') }}" class="fila-simple">
-                    <span class="celda-icono">{{ icono(categorias.get(r.categoria, 'paquete')) }} #{{ r.objeto_id }} {{ r.titulo }}</span>
-                    <span class="texto-suave">{{ r.usuario_nombre }} · {{ r.fecha_solicitud }}</span>
+                <a href="{{ url_for('reclamaciones.lista') }}" class="fila-bloque">
+                    <span class="fila-icono">{{ icono(categorias.get(r.categoria, 'paquete')) }}</span>
+                    <span class="fila-texto"><strong>#{{ r.objeto_id }} {{ r.titulo }}</strong>
+                        <span class="texto-suave">{{ r.usuario_nombre }}</span></span>
+                    <span class="fila-fecha">{{ r.fecha_solicitud[:16] }}</span>
                 </a>
             {% else %}
-                <p class="texto-suave fila-simple">No hay solicitudes pendientes.</p>
+                <p class="bloque-vacio">{{ icono('check') }} No hay solicitudes pendientes.</p>
             {% endfor %}
-        </div>
-    </section>
-    <section>
-        <h3 class="subtitulo">Actividad reciente</h3>
-        <div class="panel lista-simple">
-            {% for m in movimientos %}
-                <div class="fila-simple">
-                    <span><strong>{{ m.accion }}</strong>{{ ' → ' ~ m.estado_nuevo if m.estado_nuevo }} · #{{ m.objeto_id }} {{ m.titulo }}</span>
-                    <span class="texto-suave">{{ m.fecha_hora }} · {{ m.usuario_nombre }}</span>
-                </div>
-            {% else %}
-                <p class="texto-suave fila-simple">Aún no hay movimientos.</p>
-            {% endfor %}
-            {% if movimientos %}<a href="{{ url_for('objetos.historial') }}" class="fila-simple enlace-vertodo">Ver historial completo →</a>{% endif %}
-        </div>
+        </section>
+
+        <section class="panel bloque">
+            <header class="bloque-cabecera">
+                <h3>Objetos por estado</h3>
+                <a href="{{ url_for('objetos.historial') }}" class="enlace-vertodo">Historial →</a>
+            </header>
+            <ul class="barras-estado">
+                {% for e in estados %}
+                    {% set n = por_estado.get(e, 0) %}
+                    <li>
+                        <span class="barra-nombre"><span class="punto estado-punto-{{ e|lower|replace(' ', '-') }}"></span>{{ e }}</span>
+                        <span class="barra-pista"><span class="barra-relleno estado-punto-{{ e|lower|replace(' ', '-') }}"
+                              style="width: {{ (100 * n / total_objetos)|round(0, 'ceil') if total_objetos else 0 }}%"></span></span>
+                        <span class="barra-total">{{ n }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        </section>
+    </div>
+
+    <section class="panel bloque">
+        <header class="bloque-cabecera">
+            <h3>Actividad reciente</h3>
+            {% if movimientos %}<a href="{{ url_for('objetos.historial') }}" class="enlace-vertodo">Ver todo →</a>{% endif %}
+        </header>
+        {% for m in movimientos %}
+            <div class="fila-bloque">
+                <span class="punto-linea"></span>
+                <span class="fila-texto"><span><strong>{{ m.accion }}</strong>{% if m.estado_nuevo %} <span class="estado-mini">→ {{ m.estado_nuevo }}</span>{% endif %}</span>
+                    <span class="texto-suave">#{{ m.objeto_id }} {{ m.titulo }} · {{ m.usuario_nombre }}</span></span>
+                <span class="fila-fecha">{{ m.fecha_hora[:16] }}</span>
+            </div>
+        {% else %}
+            <p class="bloque-vacio">Aún no hay movimientos.</p>
+        {% endfor %}
     </section>
 </div>
 {% endblock %}

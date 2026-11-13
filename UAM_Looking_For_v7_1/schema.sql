@@ -248,8 +248,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_reclamacion_pendiente ON reclamaciones (ent
 -- ---------- A. Hechos pasados: no se modifican ni se borran ----------
 CREATE TRIGGER IF NOT EXISTS trg_historial_sin_cambios BEFORE UPDATE ON historial
 BEGIN SELECT RAISE(ABORT, 'El historial no se modifica: solo se agregan filas.'); END;
-CREATE TRIGGER IF NOT EXISTS trg_historial_sin_borrar BEFORE DELETE ON historial
-BEGIN SELECT RAISE(ABORT, 'El historial no se borra.'); END;
+-- trg_historial_sin_borrar: ver «Limpieza del historial» al final (v9.1.01).
 CREATE TRIGGER IF NOT EXISTS trg_entregas_sin_cambios BEFORE UPDATE ON entregas
 BEGIN SELECT RAISE(ABORT, 'Una entrega registrada no se modifica.'); END;
 CREATE TRIGGER IF NOT EXISTS trg_entregas_sin_borrar BEFORE DELETE ON entregas
@@ -448,6 +447,51 @@ BEGIN SELECT RAISE(ABORT, 'Un reporte de visitante no se borra: se cierra.'); EN
 CREATE TRIGGER IF NOT EXISTS trg_reclamacion_sin_cancelar BEFORE UPDATE OF estado ON reclamaciones
 WHEN NEW.estado = 'Cancelada' AND OLD.estado <> 'Cancelada'
 BEGIN SELECT RAISE(ABORT, 'Una reclamación no se cancela: el personal la acepta o la rechaza.'); END;
+
+-- ---------------------------------------------------------------------
+-- v9.1.01 · Limpieza del historial (solo el administrador).
+-- Cada limpieza es una fila de esta tabla y sirve de dos cosas a la vez:
+--   1. Permiso: mientras exista una limpieza «En curso», el historial deja borrar sus filas
+--      (todas, o solo las anteriores a «antes_de»). Fuera de eso, el historial sigue sin poder borrarse.
+--   2. Bitácora: al terminar queda «Hecha», con cuántas filas se borraron. No se modifica ni se borra.
+-- La app la abre, borra y la cierra en UNA transacción: nunca queda una «En curso» guardada.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS limpiezas_historial (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id     INTEGER NOT NULL REFERENCES usuarios (id) ON UPDATE RESTRICT ON DELETE RESTRICT,
+    antes_de       TEXT    CHECK (antes_de IS NULL OR date(antes_de) IS antes_de),   -- NULL = todo el historial
+    estado         TEXT    NOT NULL DEFAULT 'En curso' CHECK (estado IN ('En curso', 'Hecha')),
+    filas_borradas INTEGER CHECK (filas_borradas >= 0),
+    fecha_hora     TEXT    NOT NULL CHECK (datetime(fecha_hora) IS fecha_hora),
+    CHECK ((estado = 'En curso') = (filas_borradas IS NULL))
+);
+-- Solo una limpieza en curso a la vez.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_limpieza_en_curso ON limpiezas_historial (estado) WHERE estado = 'En curso';
+
+CREATE TRIGGER IF NOT EXISTS trg_limpieza_valida BEFORE INSERT ON limpiezas_historial
+BEGIN
+    SELECT RAISE(ABORT, 'Solo el administrador activo limpia el historial.')
+    WHERE NOT EXISTS (SELECT 1 FROM usuarios WHERE id = NEW.usuario_id AND rol = 'Administrador' AND activo = 1);
+    SELECT RAISE(ABORT, 'Una limpieza nueva empieza En curso.') WHERE NEW.estado <> 'En curso';
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_limpieza_cerrar BEFORE UPDATE ON limpiezas_historial
+BEGIN
+    SELECT RAISE(ABORT, 'Una limpieza solo se cierra una vez y lo registrado no cambia.')
+    WHERE OLD.estado <> 'En curso' OR NEW.estado <> 'Hecha'
+       OR NEW.usuario_id IS NOT OLD.usuario_id OR NEW.antes_de IS NOT OLD.antes_de OR NEW.fecha_hora IS NOT OLD.fecha_hora;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_limpiezas_sin_borrar BEFORE DELETE ON limpiezas_historial
+BEGIN SELECT RAISE(ABORT, 'La bitácora de limpiezas no se borra.'); END;
+
+-- Reemplaza la versión de la v9 («el historial no se borra»): ahora se borra solo dentro de una limpieza en curso.
+DROP TRIGGER IF EXISTS trg_historial_sin_borrar;
+CREATE TRIGGER trg_historial_sin_borrar BEFORE DELETE ON historial
+WHEN NOT EXISTS (SELECT 1 FROM limpiezas_historial l
+                 WHERE l.estado = 'En curso' AND (l.antes_de IS NULL OR OLD.fecha_hora < l.antes_de))
+BEGIN SELECT RAISE(ABORT, 'El historial no se borra (solo en una limpieza del administrador).'); END;
+
 
 -- ---------------------------------------------------------------------
 -- Consulta de ejemplo: la vida de un objeto con su estado anterior, sin guardarlo dos veces.

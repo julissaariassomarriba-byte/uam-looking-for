@@ -7,6 +7,18 @@
     <a href="{{ url_for('objetos.inicio') }}" class="enlace-volver">{{ icono('flecha_izq') }} Volver al catálogo</a>
 </div>
 
+{% if es_encargado and objeto.oculto %}
+<p class="aviso-plazo">{{ icono('privado') }}
+    <span><strong>Oculto del catálogo desde el {{ objeto.fecha_oculta[:10] }}.</strong>
+        Ya pasaron {{ dias_plazo }} días desde que salió de custodia: los estudiantes ya no lo ven en el catálogo ni pueden
+        reclamarlo (quien ya lo reclamó sí puede seguir viéndolo). El registro se conserva completo.</span></p>
+{% elif es_encargado and objeto.estado in ('Entregado', 'Devuelto') and objeto.fecha_oculta %}
+<p class="aviso-plazo">{{ icono('historial') }}
+    {% if objeto.plazo_cumplido %}Este objeto ya cumplió su plazo en el catálogo, pero sigue visible porque tiene una reclamación pendiente.
+    {% else %}Este objeto dejará de verse en el catálogo el {{ objeto.fecha_oculta[:10] }}
+    ({{ dias_plazo }} días después de salir de custodia){{ ', salvo que tenga una reclamación pendiente' if objeto.estado == 'Entregado' }}.{% endif %}</p>
+{% endif %}
+
 <div class="detalle">
     <section class="panel">
         {% if objeto.tiene_foto %}

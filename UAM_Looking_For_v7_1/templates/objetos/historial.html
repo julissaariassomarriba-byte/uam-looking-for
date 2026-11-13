@@ -3,18 +3,18 @@
 
 {% block contenido %}
 <div class="titulo-pagina">
-    <h2>Historial</h2>
+    <div>
+        <h2>Historial</h2>
+        <p class="texto-suave subtitulo-pagina">Todos los objetos y cada movimiento registrado, del más reciente al más antiguo.</p>
+    </div>
     <a href="{{ url_for('objetos.historial_pdf') }}" class="btn">{{ icono('descargar') }} Descargar PDF</a>
 </div>
 
 <div class="resumen-estados">
     {% for nombre, ic in estados.items() %}
-        <div class="panel resumen-tarjeta estado-texto-{{ nombre|lower|replace(' ', '-') }}">
-            {{ icono(ic) }}
-            <div>
-                <span class="resumen-numero">{{ conteo.get(nombre, 0) }}</span>
-                <span class="texto-suave">{{ nombre }}</span>
-            </div>
+        <div class="panel metrica metrica-estado borde-{{ nombre|lower|replace(' ', '-') }}">
+            <span class="metrica-etiqueta">{{ nombre }}</span>
+            <span class="metrica-numero">{{ conteo.get(nombre, 0) }}</span>
         </div>
     {% endfor %}
 </div>
@@ -65,4 +65,32 @@
         </tbody>
     </table>
 </div>
+
+{% if es_admin %}
+<h3 class="subtitulo">Limpiar historial</h3>
+<div class="panel limpiar-historial">
+    <p class="texto-suave">Borra movimientos de la lista de arriba para que no crezca sin fin. Los objetos, entregas y
+        reclamaciones no se tocan. Descarga el PDF antes si quieres conservar una copia: la limpieza no se puede deshacer.</p>
+    <form method="POST" action="{{ url_for('objetos.limpiar_historial') }}" class="limpiar-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="casilla"><input type="radio" name="alcance" value="fecha" checked>
+            <span>Solo los movimientos anteriores al
+                <input type="date" name="antes_de" max="{{ hoy }}" value="{{ hoy }}" aria-label="Fecha límite"></span></label>
+        <label class="casilla"><input type="radio" name="alcance" value="todo"> <span>Todo el historial</span></label>
+        <label class="casilla"><input type="checkbox" name="confirmado" value="1" required>
+            <span>Entiendo que los movimientos borrados no se pueden recuperar.</span></label>
+        <div><button type="submit" class="btn btn-peligro">Limpiar historial</button></div>
+    </form>
+    {% if limpiezas %}
+        <p class="texto-suave limpiezas-titulo">Últimas limpiezas</p>
+        <ul class="limpiezas">
+            {% for l in limpiezas %}
+                <li><strong>{{ l.fecha_hora[:16] }}</strong> · {{ l.usuario_nombre }} ·
+                    {{ 'todo el historial' if not l.antes_de else 'anteriores al ' ~ l.antes_de }} ·
+                    {{ l.filas_borradas }} movimiento{{ '' if l.filas_borradas == 1 else 's' }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+</div>
+{% endif %}
 {% endblock %}

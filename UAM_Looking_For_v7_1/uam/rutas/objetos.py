@@ -1,14 +1,15 @@
 """Catálogo, ficha de cada objeto, recepción, entrega e historial."""
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, session, url_for
 
-from ..config import CATEGORIAS, UBICACIONES
+from ..config import CATEGORIAS, ROL_ADMIN, UBICACIONES
 from ..datos import objetos, reclamaciones
 from ..datos.conexion import ahora, hoy
 from ..seguridad import nuevo_token
 from ..servicios import objetos as servicio_objetos
+from ..servicios import historial as servicio_historial
 from ..servicios import reclamaciones as servicio_reclamaciones
 from ..utilidades import imagenes, reporte_pdf
-from .comun import avisar, es_personal, login_requerido, opcion, personal_requerido
+from .comun import avisar, es_personal, login_requerido, opcion, personal_requerido, requiere, tiene_rol
 
 bp = Blueprint('objetos', __name__)
 ENVIOS_RECORDADOS = 10   # formularios de recepción recordados para no guardar dos veces el mismo objeto
@@ -18,9 +19,14 @@ ENVIOS_RECORDADOS = 10   # formularios de recepción recordados para no guardar 
 @login_requerido
 def inicio():
     categoria, ubicacion = opcion('categoria', CATEGORIAS), opcion('ubicacion', UBICACIONES)
-    return render_template('objetos/index.html', objetos=objetos.listar(categoria, ubicacion, publicos=not es_personal()),
-                           categoria_actual=categoria, ubicacion_actual=ubicacion, por_categoria=objetos.contar_por('categoria'),
-                           por_estado=objetos.contar_por('estado'), por_ubicacion=objetos.contar_por('ubicacion'))
+    personal = es_personal()
+    # Los objetos entregados hace más del plazo ya no salen en el catálogo; el personal los revisa en «Ocultos».
+    ver_ocultos = personal and request.args.get('ocultos') == '1'
+    return render_template('objetos/index.html', objetos=objetos.listar(categoria, ubicacion, publicos=not personal, ocultos=ver_ocultos),
+                           categoria_actual=categoria, ubicacion_actual=ubicacion, ver_ocultos=ver_ocultos,
+                           por_categoria=objetos.contar_por('categoria', visibles=True),
+                           por_estado=objetos.contar_por('estado', visibles=True),
+                           por_ubicacion=objetos.contar_por('ubicacion', visibles=True))
 
 
 @bp.route('/objeto/<int:id>/foto')
@@ -68,6 +74,8 @@ def mostrar_detalle(id, datos_entrega=None):
     personal = es_personal()
     objeto = objetos.buscar(id, publico=not personal) or abort(404)
     entrega = reclamaciones.buscar_entrega(id)
+    if not personal and objeto['oculto'] and not reclamaciones.listar(objeto_id=id, usuario_id=g.usuario['id']):
+        abort(404)   # ya salió del catálogo: solo lo sigue viendo quien lo reclamó
     if not personal:
         return render_template('objetos/detalle.html', objeto=objeto,
                                lo_retire_yo=bool(entrega) and entrega['retirado_por'] == g.usuario['id'],
@@ -109,8 +117,17 @@ def reportar():
 @bp.route('/historial')
 @personal_requerido
 def historial():
-    return render_template('objetos/historial.html', objetos=objetos.listar(), movimientos=objetos.listar_historial(),
-                           conteo=objetos.contar_por('estado'))
+    return render_template('objetos/historial.html', objetos=objetos.listar(ocultos=None), movimientos=objetos.listar_historial(),
+                           conteo=objetos.contar_por('estado'), hoy=hoy(),
+                           limpiezas=objetos.listar_limpiezas() if tiene_rol(ROL_ADMIN) else [])
+
+
+@bp.route('/historial/limpiar', methods=['POST'])
+@requiere(ROL_ADMIN, mensaje='Solo el administrador puede limpiar el historial.')
+def limpiar_historial():
+    f = request.form
+    avisar(*servicio_historial.limpiar(f.get('alcance'), f.get('antes_de'), f.get('confirmado') == '1', g.usuario))
+    return redirect(url_for('objetos.historial'))
 
 
 @bp.route('/historial/pdf')
@@ -118,7 +135,7 @@ def historial():
 def historial_pdf():
     """Descarga el historial como PDF (reporte_pdf lo arma sin librerías)."""
     fecha = ahora()
-    pdf = reporte_pdf.generar_historial(objetos.listar(), objetos.listar_historial(), objetos.contar_por('estado'),
+    pdf = reporte_pdf.generar_historial(objetos.listar(ocultos=None), objetos.listar_historial(), objetos.contar_por('estado'),
                                         g.usuario['nombre'], fecha)
     return Response(pdf, mimetype='application/pdf',
                     headers={'Content-Disposition': f'attachment; filename=historial_objetos_{fecha[:10]}.pdf'})

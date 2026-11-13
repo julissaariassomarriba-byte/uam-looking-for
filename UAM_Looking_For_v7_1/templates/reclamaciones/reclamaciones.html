@@ -2,7 +2,10 @@
 
 {% block contenido %}
 <div class="titulo-pagina">
-    <h2>Reclamaciones</h2>
+    <div>
+        <h2>Reclamaciones</h2>
+        <p class="texto-suave subtitulo-pagina">Estudiantes que afirman que un objeto ya entregado era suyo.</p>
+    </div>
 </div>
 
 <nav class="pestanas" aria-label="Filtrar por estado">
@@ -15,8 +18,8 @@
 </nav>
 
 {% if estado_actual == 'Pendiente' and reclamaciones %}
-    <p class="texto-suave intro-seccion">Alguien afirma que un objeto ya entregado era suyo. Abre el objeto para revisar su registro privado
-        y quién lo retiró. Si tiene razón, acepta: el objeto vuelve a resguardo para recuperarlo y entregárselo.</p>
+    <p class="texto-suave intro-seccion">Abre el objeto para revisar su registro privado y quién lo retiró. Si quien reclama tiene razón,
+        acepta: el objeto vuelve a resguardo para recuperarlo y entregárselo.</p>
 {% endif %}
 
 <div class="lista-reclamos">

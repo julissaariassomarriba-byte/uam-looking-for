@@ -547,8 +547,8 @@ if V85:
     conexion.configurar(base_v85)
     conexion.crear_tablas()   # lo mismo que hace crear_app() al iniciar
     c8 = sqlite3.connect(base_v85)
-    ok('al iniciar, la v9 solo agrega su trigger: datos idénticos y 26 triggers', contenido(base_v85) == antes_v85
-       and c8.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger'").fetchone()[0] == 26
+    ok('al iniciar, la v9.1.01 solo agrega lo suyo: datos idénticos y 29 triggers', contenido(base_v85) == antes_v85
+       and c8.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger'").fetchone()[0] == 29
        and c8.execute('PRAGMA integrity_check').fetchone()[0] == 'ok')
     c8.close()
     conexion.crear_tablas()
@@ -629,7 +629,7 @@ if V62:
     ok('historial: Devolución y Recuperado', ('Devolución', 'Devuelto') in q('SELECT accion, estado_nuevo FROM historial')
        and ('Recuperación', 'Recuperado') in q('SELECT accion, estado_nuevo FROM historial'))
     ok('reportado_por = registrado_por quedó vacío', q("SELECT reportado_por FROM objetos WHERE titulo='Devuelto'")[0][0] is None)
-    ok('26 triggers tras migrar (incluye reportes_visitantes y el de v9)', q("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger'")[0][0] == 26)
+    ok('29 triggers tras migrar (incluye reportes_visitantes, el de v9 y la limpieza de v9.1.01)', q("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger'")[0][0] == 29)
     ok('integridad tras migrar', q('PRAGMA integrity_check')[0][0] == 'ok' and not q('PRAGMA foreign_key_check'))
     hashes = q('SELECT cif, contrasena_hash FROM usuarios WHERE contrasena_hash IS NOT NULL')
     ok('contraseñas migradas a hash y verificables', len(hashes) == 3 and all(seguridad.verificar_contrasena('clave456' if c == 'EST2' else 'clave123', h) for c, h in hashes))
@@ -724,6 +724,82 @@ ok('v9 reclamar: con datos correctos se envía', 'Solicitud enviada' in post(an9
 ok('v9 logout: por GET ya no cierra la sesión (405)', an9.get('/logout').status_code == 405 and an9.get('/').status_code == 200)
 ok('v9 logout: por POST con token sí', 'cerrado sesión' in post(an9, '/logout', {}) and an9.get('/').status_code == 302)
 ok('v9 logout: sin token no (400)', e9.post('/logout').status_code == 400)
+# ====================== v9.1.01: limpiar el historial (solo el administrador) ======================
+movs = lambda: fila('SELECT COUNT(*) FROM historial')[0]
+limpiezas = lambda: todas("SELECT antes_de, estado, filas_borradas FROM limpiezas_historial ORDER BY id")
+ok('v9.1.01: hay movimientos para probar', movs() > 3, movs())
+ok('v9.1.01: el admin ve «Limpiar historial»', 'Limpiar historial' in pagina(a9, '/historial'))
+ok('v9.1.01: el encargado no ve la sección', 'Limpiar historial' not in pagina(e9, '/historial'))
+n0 = movs()
+r = post(e9, '/historial/limpiar', {'alcance': 'todo', 'confirmado': '1'})
+ok('v9.1.01: el encargado no puede limpiar', 'Solo el administrador puede limpiar el historial' in r and movs() == n0)
+ok('v9.1.01: sin confirmar no borra', 'Marca la casilla' in post(a9, '/historial/limpiar', {'alcance': 'todo'}) and movs() == n0)
+ok('v9.1.01: fecha inválida se rechaza', 'fecha válida' in post(a9, '/historial/limpiar', {'alcance': 'fecha', 'antes_de': '2026-02-30', 'confirmado': '1'}) and movs() == n0)
+ok('v9.1.01: alcance inventado se rechaza', 'Elige qué parte' in post(a9, '/historial/limpiar', {'alcance': 'x', 'confirmado': '1'}) and movs() == n0)
+ok('v9.1.01: rango sin movimientos avisa', 'No hay movimientos' in post(a9, '/historial/limpiar', {'alcance': 'fecha', 'antes_de': '2000-01-01', 'confirmado': '1'}))
+# Dos movimientos «viejos» para probar la limpieza por fecha (escritos directo, como si fueran de 2025).
+con = sqlite3.connect(BD)
+oid, uid = con.execute("SELECT objeto_id, usuario_id FROM historial WHERE accion = 'Registro' LIMIT 1").fetchone()
+con.executemany("INSERT INTO historial (objeto_id, usuario_id, accion, fecha_hora) VALUES (?, ?, 'Foto', ?)",
+                [(oid, uid, '2025-03-01 10:00:00'), (oid, uid, '2025-05-01 10:00:00')])
+con.commit(); con.close()
+n1 = movs()
+r = post(a9, '/historial/limpiar', {'alcance': 'fecha', 'antes_de': '2026-01-01', 'confirmado': '1'})
+ok('v9.1.01: por fecha borra solo lo anterior', 'Se borraron 2 movimiento(s) anteriores al 2026-01-01' in r and movs() == n1 - 2, re.findall(r'class="alerta[^"]*"[^>]*>([^<]+)', r))
+ok('v9.1.01: queda en la bitácora, cerrada', limpiezas() == [('2026-01-01', 'Hecha', 2)], limpiezas())
+ok('v9.1.01: la página muestra la última limpieza', 'anteriores al 2026-01-01' in pagina(a9, '/historial'))
+n2 = movs()
+r = post(a9, '/historial/limpiar', {'alcance': 'todo', 'confirmado': '1'})
+ok('v9.1.01: «todo» deja el historial vacío', f'Se borraron {n2} movimiento(s) de todo el historial' in r and movs() == 0, re.findall(r'class="alerta[^"]*"[^>]*>([^<]+)', r))
+ok('v9.1.01: los objetos no se tocan', total_objetos() > 0 and fila('SELECT COUNT(*) FROM entregas')[0] > 0)
+ok('v9.1.01: no queda ninguna limpieza «En curso»', not todas("SELECT 1 FROM limpiezas_historial WHERE estado = 'En curso'"))
+ok('v9.1.01: lo nuevo se sigue anotando', (post(e9, '/reportar', dict(base9, envio='v9101', titulo='Gorra negra', sin_persona='1')) or True) and movs() == 1)
+con = sqlite3.connect(BD)
+for nombre, sql in [('borrar historial sin limpieza', 'DELETE FROM historial'),
+                    ('borrar la bitácora', 'DELETE FROM limpiezas_historial'),
+                    ('reabrir una limpieza', "UPDATE limpiezas_historial SET estado = 'En curso', filas_borradas = NULL"),
+                    ('un encargado abre una limpieza', f"INSERT INTO limpiezas_historial (usuario_id, fecha_hora) VALUES ({id_de('ENC0001')}, '2026-11-13 10:00:00')")]:
+    try:
+        con.execute(sql); ok(f'v9.1.01 base: {nombre} se rechaza', False)
+    except sqlite3.DatabaseError as e:
+        ok(f'v9.1.01 base: {nombre} se rechaza', True)
+con.rollback(); con.close()
+# ====================== v9.1.01: objetos entregados que se ocultan del catálogo (sin tocar la base) ======================
+from uam.datos import objetos as datos_objetos  # noqa: E402
+sf = app.test_client()
+ok('plazo: Ana entra', 'Bienvenido' in entrar(sf, '26010001', 'clave123'))
+datos_objetos.configurar_plazo('99'); p99 = datos_objetos.dias_plazo()
+datos_objetos.configurar_plazo('1'); p1 = datos_objetos.dias_plazo()
+datos_objetos.configurar_plazo('abc'); pabc = datos_objetos.dias_plazo()
+datos_objetos.configurar_plazo('4'); p4 = datos_objetos.dias_plazo()
+ok('plazo: DIAS_OCULTAR se limita de 3 a 7 y por defecto es 5', (p99, p1, pabc, p4) == (7, 3, 5, 4), (p99, p1, pabc, p4))
+datos_objetos.configurar_plazo(None)
+post(e9, '/reportar', dict(base9, envio='plazo-1', sin_persona='1', titulo='Cartera café'))
+oc = fila("SELECT id FROM objetos WHERE titulo='Cartera café'")[0]
+entf = {'nombre': 'Pedro Gómez', 'tipo': 'Visitante', 'cif': pedro, 'telefono': '8888 1111', 'senas': 'Cartera café con dos tarjetas', 'confirmado': '1'}
+ok('plazo: se entrega la cartera', 'Entrega registrada' in post(e9, f'/objeto/{oc}/entregar', entf))
+ok('plazo: recién entregada sigue en el catálogo del estudiante', 'Cartera café' in sf.get('/').get_data(as_text=True))
+ok('plazo: el personal ve cuándo se ocultará', 'dejará de verse en el catálogo' in e9.get(f'/objeto/{oc}').get_data(as_text=True))
+datos_objetos._plazo['dias'] = 0   # solo en la prueba: como si ya hubieran pasado los días
+catalogo_est = sf.get('/').get_data(as_text=True)
+ok('plazo: cumplido el plazo ya no sale en el catálogo del estudiante', 'Cartera café' not in catalogo_est)
+ok('plazo: ni lo abre con la dirección directa (404)', sf.get(f'/objeto/{oc}').status_code == 404)
+ok('plazo: con una reclamación pendiente no se oculta', 'Gorra roja' in catalogo_est)
+ok('plazo: ya no se puede reclamar', 'plazo para reclamar este objeto ya terminó' in post(sf, f'/objeto/{oc}/reclamar', rec9))
+catalogo_enc = e9.get('/').get_data(as_text=True)
+ok('plazo: tampoco sale en el catálogo del personal, que recibe el aviso', 'Cartera café' not in catalogo_enc and 'del catálogo.' in catalogo_enc)
+ocultos = e9.get('/?ocultos=1').get_data(as_text=True)
+ok('plazo: el personal lo encuentra en «Ocultos»', 'Cartera café' in ocultos and 'Objetos ocultos' in ocultos)
+ok('plazo: un estudiante no puede pedir la lista de ocultos', 'Cartera café' not in sf.get('/?ocultos=1').get_data(as_text=True))
+ok('plazo: el panel del administrador también avisa', 'del catálogo.' in a9.get('/admin').get_data(as_text=True))
+ok('plazo: el historial sigue incluyendo los ocultos', 'Cartera café' in e9.get('/historial').get_data(as_text=True))
+ok('plazo: el PDF se sigue generando', e9.get('/historial/pdf').status_code == 200)
+detalle_oculto = e9.get(f'/objeto/{oc}').get_data(as_text=True)
+ok('plazo: la ficha dice desde cuándo está oculto y no ofrece borrar', 'Oculto del catálogo desde' in detalle_oculto
+   and 'Eliminar' not in detalle_oculto and 'Quitar solo la foto' not in detalle_oculto)
+ok('plazo: el objeto sigue completo en la base', fila('SELECT COUNT(*) FROM objetos o JOIN entregas e ON e.objeto_id = o.id WHERE o.id = ?', (oc,))[0] == 1)
+datos_objetos.configurar_plazo(None)
+ok('plazo: con el plazo normal vuelve a verse (recién entregada)', 'Cartera café' in sf.get('/').get_data(as_text=True))
 ok('v9: integridad al final', fila('PRAGMA integrity_check')[0] == 'ok' and not todas('PRAGMA foreign_key_check'))
 
 print(f'\n{sum(resultados)}/{len(resultados)} pruebas pasaron')

@@ -5,7 +5,10 @@
 
 {% block contenido %}
 <div class="titulo-pagina">
-    <h2>Reportes de visitantes</h2>
+    <div>
+        <h2>Reportes de visitantes</h2>
+        <p class="texto-suave subtitulo-pagina">Personas sin cuenta que perdieron algo en la universidad.</p>
+    </div>
     <form method="GET" class="fila-form buscar-codigo" role="search">
         {% if estado_actual %}<input type="hidden" name="estado" value="{{ estado_actual }}">{% endif %}
         <input type="search" name="codigo" value="{{ codigo }}" maxlength="13" placeholder="Buscar por código (UAM-…)" aria-label="Buscar por código">
@@ -22,8 +25,8 @@
     {% endfor %}
 </nav>
 
-<p class="texto-suave intro-seccion">Visitantes sin cuenta que perdieron algo en la universidad. Abre un reporte para ver la foto y los datos de
-    contacto, cambiar su estado o relacionarlo con un objeto encontrado.</p>
+<p class="texto-suave intro-seccion">Abre un reporte para ver la foto y los datos de contacto, cambiar su estado o relacionarlo con un
+    objeto encontrado.</p>
 
 <div class="lista-reclamos">
     {% for r in reportes %}

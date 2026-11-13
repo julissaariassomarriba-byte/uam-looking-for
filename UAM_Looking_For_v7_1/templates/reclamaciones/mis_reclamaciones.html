@@ -3,7 +3,10 @@
 
 {% block contenido %}
 <div class="titulo-pagina">
-    <h2>Mis reclamaciones</h2>
+    <div>
+        <h2>Mis reclamaciones</h2>
+        <p class="texto-suave subtitulo-pagina">El avance de cada solicitud que enviaste.</p>
+    </div>
     <a href="{{ url_for('objetos.inicio') }}" class="enlace-volver">{{ icono('flecha_izq') }} Volver al catálogo</a>
 </div>
 

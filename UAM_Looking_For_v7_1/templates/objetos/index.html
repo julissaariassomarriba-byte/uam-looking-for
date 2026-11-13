@@ -6,11 +6,11 @@
     <aside class="panel barra-lateral">
         <h3>Categorías</h3>
         <div class="lista-lateral">
-            <a href="{{ url_for('objetos.inicio', ubicacion=ubicacion_actual) }}" class="item-lateral {{ 'activo' if not categoria_actual }}">
+            <a href="{{ url_for('objetos.inicio', ubicacion=ubicacion_actual, ocultos=1 if ver_ocultos else None) }}" class="item-lateral {{ 'activo' if not categoria_actual }}">
                 {{ icono('cuadricula') }} <span>Todas</span> <span class="contador">{{ por_categoria.values()|sum }}</span>
             </a>
             {% for nombre, ic in categorias.items() %}
-                <a href="{{ url_for('objetos.inicio', categoria=nombre, ubicacion=ubicacion_actual) }}" class="item-lateral {{ 'activo' if categoria_actual == nombre }}">
+                <a href="{{ url_for('objetos.inicio', categoria=nombre, ubicacion=ubicacion_actual, ocultos=1 if ver_ocultos else None) }}" class="item-lateral {{ 'activo' if categoria_actual == nombre }}">
                     {{ icono(ic) }} <span>{{ nombre }}</span> <span class="contador">{{ por_categoria.get(nombre, 0) }}</span>
                 </a>
             {% endfor %}
@@ -19,7 +19,7 @@
         <h3>Dónde se guarda</h3>
         <div class="lista-lateral">
             {% for u in ubicaciones %}
-                <a href="{{ url_for('objetos.inicio', ubicacion=u, categoria=categoria_actual) }}"
+                <a href="{{ url_for('objetos.inicio', ubicacion=u, categoria=categoria_actual, ocultos=1 if ver_ocultos else None) }}"
                    class="item-lateral {{ 'activo' if ubicacion_actual == u }}">
                     {{ icono('ubicacion') }} <span>{{ u }}</span> <span class="contador">{{ por_ubicacion.get(u, 0) }}</span>
                 </a>
@@ -38,10 +38,28 @@
 
     <section>
         <div class="titulo-pagina">
-            <h2>{{ categoria_actual or 'Catálogo de objetos' }}</h2>
-            <span class="texto-suave">{{ objetos|length }} objeto(s){% if ubicacion_actual %} en {{ ubicacion_actual }} ·
-                <a href="{{ url_for('objetos.inicio', categoria=categoria_actual) }}">ver todas las ubicaciones</a>{% endif %}</span>
+            <div>
+                <h2>{{ 'Objetos ocultos' if ver_ocultos else (categoria_actual or 'Catálogo de objetos') }}</h2>
+                <p class="texto-suave subtitulo-pagina">{{ objetos|length }} {{ 'objeto' if objetos|length == 1 else 'objetos' }}
+                    {%- if ubicacion_actual %} en {{ ubicacion_actual }} ·
+                    <a href="{{ url_for('objetos.inicio', categoria=categoria_actual, ocultos=1 if ver_ocultos else None) }}">ver todas las ubicaciones</a>{% endif %}</p>
+            </div>
+            {% if es_encargado %}
+                <nav class="filtro-rol" aria-label="Visibles u ocultos">
+                    <a href="{{ url_for('objetos.inicio') }}" class="{{ 'activo' if not ver_ocultos }}">En el catálogo</a>
+                    <a href="{{ url_for('objetos.inicio', ocultos=1) }}" class="{{ 'activo' if ver_ocultos }}">Ocultos <span>{{ objetos_ocultos }}</span></a>
+                </nav>
+            {% endif %}
         </div>
+
+        {% if es_encargado and ver_ocultos %}
+            <p class="aviso-plazo">{{ icono('info') }} Estos objetos se entregaron o devolvieron hace {{ dias_plazo }} días o más: ya no salen en el
+                catálogo para los estudiantes. Siguen guardados con todo su registro.</p>
+        {% elif es_encargado and objetos_ocultos %}
+            <a href="{{ url_for('objetos.inicio', ocultos=1) }}" class="aviso-plazo aviso-enlace">{{ icono('info') }}
+                <span><strong>{{ objetos_ocultos }} {{ 'objeto ya se ocultó' if objetos_ocultos == 1 else 'objetos ya se ocultaron' }} del catálogo.</strong>
+                    Los estudiantes ya no los ven; tú los encuentras en «Ocultos».</span> <span class="aviso-ir">Ver →</span></a>
+        {% endif %}
 
         <div class="grid-objetos">
             {% for objeto in objetos %}
@@ -63,11 +81,14 @@
                         {% else %}
                             <p>{{ icono('calendario') }} Reportado en {{ objeto.periodo|mes }}</p>
                         {% endif %}
+                        {% if es_encargado and objeto.estado in ('Entregado', 'Devuelto') and not objeto.oculto and objeto.fecha_oculta %}
+                            <p class="texto-suave">{{ icono('historial') }} {{ 'Con reclamación pendiente: no se oculta' if objeto.plazo_cumplido else 'Se oculta el ' ~ objeto.fecha_oculta[:10] }}</p>
+                        {% endif %}
                         <span class="btn btn-bloque">Ver detalles</span>
                     </div>
                 </a>
             {% else %}
-                <p class="panel vacio">No hay objetos registrados con estos filtros.</p>
+                <p class="panel vacio">{{ 'No hay objetos ocultos: nada que limpiar.' if ver_ocultos else 'No hay objetos registrados con estos filtros.' }}</p>
             {% endfor %}
         </div>
     </section>

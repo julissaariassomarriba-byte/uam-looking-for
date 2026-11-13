@@ -1,92 +1,108 @@
 {% extends 'base.html' %}
 {% from 'parciales/macros.html' import icono %}
 
+{% block titulo %}Cuentas | UAM Looking For{% endblock %}
+
 {% block contenido %}
 <div class="titulo-pagina">
-    <h2>Administración de cuentas</h2>
-    <span class="texto-suave">{{ usuarios|length }} cuenta(s)</span>
+    <div>
+        <h2>Cuentas</h2>
+        <p class="texto-suave subtitulo-pagina">Crea, edita o desactiva cuentas de encargados y estudiantes.</p>
+    </div>
 </div>
 
-<div class="admin-cuentas">
-    <section class="panel formulario-lateral">
-        <h3>{{ icono('mas') }} Registrar cuenta</h3>
-        <form method="POST" action="{{ url_for('admin.usuarios_lista') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div>
-                <label for="nombre">Nombre completo</label>
-                <input type="text" id="nombre" name="nombre" maxlength="{{ largo.nombre }}" value="{{ datos.get('nombre', '') }}" required>
-            </div>
-            <div>
-                <label for="cif">CIF / cédula (usuario)</label>
-                <input type="text" id="cif" name="cif" maxlength="{{ largo.cif }}" value="{{ datos.get('cif', '') }}" required minlength="4">
-            </div>
-            <div>
-                <label for="correo">Correo institucional</label>
-                <input type="email" id="correo" name="correo" maxlength="{{ largo.correo }}" value="{{ datos.get('correo', '') }}" required>
-            </div>
-            <div>
-                <label for="carrera">Carrera / Departamento</label>
-                <input type="text" id="carrera" name="carrera" maxlength="{{ largo.carrera }}" value="{{ datos.get('carrera', '') }}">
-            </div>
-            <div>
-                <label for="rol">Rol</label>
-                <select id="rol" name="rol" required>
-                    {% for r in roles %}<option value="{{ r }}" {{ 'selected' if datos.get('rol') == r }}>{{ r }}</option>{% endfor %}
-                </select>
-            </div>
-            <div>
-                <label for="contrasena">Contraseña inicial</label>
-                <input type="password" id="contrasena" name="contrasena" maxlength="{{ largo.contrasena }}" required minlength="6" autocomplete="new-password">
-            </div>
-            <button type="submit" class="btn btn-bloque">Crear cuenta</button>
-        </form>
-    </section>
-
-    <section>
-        <form method="GET" class="barra-filtros">
-            <input type="search" name="q" maxlength="{{ largo.nombre }}" value="{{ busqueda }}" placeholder="Buscar por nombre, CIF o correo" aria-label="Buscar">
-            <select name="rol" aria-label="Filtrar por rol">
-                <option value="">Todos los roles</option>
-                {% for r in ['Administrador'] + roles|list %}<option value="{{ r }}" {{ 'selected' if rol_actual == r }}>{{ r }}</option>{% endfor %}
+{# El formulario queda plegado; se abre solo si hubo un error al crear la cuenta (para no perder lo escrito). #}
+<details class="panel nueva-cuenta" {{ 'open' if datos.get('nombre') }}>
+    <summary class="btn">{{ icono('mas') }} Nueva cuenta</summary>
+    <form method="POST" action="{{ url_for('admin.usuarios_lista') }}" class="nueva-cuenta-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div>
+            <label for="nombre">Nombre completo</label>
+            <input type="text" id="nombre" name="nombre" maxlength="{{ largo.nombre }}" value="{{ datos.get('nombre', '') }}" required>
+        </div>
+        <div>
+            <label for="cif">CIF o cédula (usuario)</label>
+            <input type="text" id="cif" name="cif" maxlength="{{ largo.cif }}" value="{{ datos.get('cif', '') }}" required minlength="4">
+        </div>
+        <div>
+            <label for="correo">Correo institucional</label>
+            <input type="email" id="correo" name="correo" maxlength="{{ largo.correo }}" value="{{ datos.get('correo', '') }}" required>
+        </div>
+        <div>
+            <label for="carrera">Carrera o departamento <span class="texto-suave">(opcional)</span></label>
+            <input type="text" id="carrera" name="carrera" maxlength="{{ largo.carrera }}" value="{{ datos.get('carrera', '') }}">
+        </div>
+        <div>
+            <label for="rol">Rol</label>
+            <select id="rol" name="rol" required>
+                {% for r in roles %}<option value="{{ r }}" {{ 'selected' if datos.get('rol') == r }}>{{ r }}</option>{% endfor %}
             </select>
-            <button type="submit" class="btn">{{ icono('lupa') }} Filtrar</button>
-        </form>
+        </div>
+        <div>
+            <label for="contrasena">Contraseña inicial</label>
+            <input type="password" id="contrasena" name="contrasena" maxlength="{{ largo.contrasena }}" required minlength="6" autocomplete="new-password">
+        </div>
+        <div class="nueva-cuenta-acciones">
+            <button type="submit" class="btn">Crear cuenta</button>
+        </div>
+    </form>
+</details>
 
-        <div class="panel tabla-contenedor">
-            <table class="tabla tabla-responsiva">
-                <thead>
-                    <tr><th>Nombre</th><th>CIF</th><th>Correo</th><th>Carrera</th><th>Rol</th><th>Estado</th><th>Acciones</th></tr>
-                </thead>
-                <tbody>
-                    {% for u in usuarios %}
-                    <tr class="{{ 'fila-inactiva' if not u.activo }}">
-                        <td data-label="Nombre">{{ u.nombre }}</td>
-                        <td data-label="CIF">{{ u.cif }}</td>
-                        <td data-label="Correo">{{ u.correo }}</td>
-                        <td data-label="Carrera">{{ u.carrera or '—' }}</td>
-                        <td data-label="Rol"><span class="rol-chip rol-{{ u.rol|lower }}">{{ u.rol }}</span></td>
-                        <td data-label="Estado"><span class="badge {{ 'estado-activo' if u.activo else 'estado-inactivo' }}">{{ 'Activa' if u.activo else 'Desactivada' }}</span></td>
-                        <td data-label="Acciones" class="celda-acciones">
-                            {% if u.rol in roles %}
-                                <div class="acciones-celda">
+<div class="panel cuentas">
+    <div class="cuentas-barra">
+        <nav class="filtro-rol" aria-label="Filtrar por rol">
+            {% set total = por_rol.values()|map(attribute='total')|sum %}
+            <a href="{{ url_for('admin.usuarios_lista', q=busqueda or None) }}" class="{{ 'activo' if not rol_actual }}">Todas <span>{{ total }}</span></a>
+            {% for r, texto in [('Estudiante', 'Estudiantes'), ('Encargado', 'Encargados'), ('Administrador', 'Administración')] %}
+                <a href="{{ url_for('admin.usuarios_lista', rol=r, q=busqueda or None) }}" class="{{ 'activo' if rol_actual == r }}">
+                    {{ texto }} <span>{{ por_rol.get(r, {}).get('total', 0) }}</span></a>
+            {% endfor %}
+        </nav>
+        <form method="GET" class="buscador" role="search">
+            {% if rol_actual %}<input type="hidden" name="rol" value="{{ rol_actual }}">{% endif %}
+            {{ icono('lupa') }}
+            <input type="search" name="q" maxlength="{{ largo.nombre }}" value="{{ busqueda }}" placeholder="Buscar por nombre, CIF o correo" aria-label="Buscar cuentas">
+        </form>
+    </div>
+
+    <div class="tabla-contenedor">
+        <table class="tabla tabla-cuentas tabla-responsiva">
+            <thead>
+                <tr><th>Cuenta</th><th>CIF</th><th>Carrera</th><th>Rol</th><th>Estado</th><th><span class="solo-lector">Acciones</span></th></tr>
+            </thead>
+            <tbody>
+                {% for u in usuarios %}
+                <tr class="{{ 'fila-inactiva' if not u.activo }}">
+                    <td data-label="Cuenta">
+                        <div class="cuenta-celda">
+                            <span class="avatar-cuenta avatar-{{ u.rol|lower }}" aria-hidden="true">{{ u.nombre.split()[0][0] }}{{ u.nombre.split()[1][0] if u.nombre.split()|length > 1 }}</span>
+                            <span><strong>{{ u.nombre }}</strong><span class="texto-suave">{{ u.correo }}</span></span>
+                        </div>
+                    </td>
+                    <td data-label="CIF" class="celda-cif">{{ u.cif }}</td>
+                    <td data-label="Carrera">{{ u.carrera or '—' }}</td>
+                    <td data-label="Rol"><span class="rol-chip rol-{{ u.rol|lower }}">{{ u.rol }}</span></td>
+                    <td data-label="Estado"><span class="estado-cuenta {{ 'activa' if u.activo else 'inactiva' }}">{{ 'Activa' if u.activo else 'Desactivada' }}</span></td>
+                    <td data-label="Acciones" class="celda-acciones">
+                        {% if u.rol in roles %}
+                            <div class="acciones-celda">
                                 <a href="{{ url_for('admin.usuarios_lista', id=u.id) }}" class="btn btn-mini btn-claro">{{ icono('editar') }} Editar</a>
                                 <form method="POST" action="{{ url_for('admin.estado_usuario', id=u.id) }}" class="form-en-linea">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="activo" value="{{ '0' if u.activo else '1' }}">
-                                    <button type="submit" class="btn btn-mini {{ 'btn-rechazar' if u.activo else 'btn-aprobar' }}">{{ 'Desactivar' if u.activo else 'Reactivar' }}</button>
+                                    <button type="submit" class="btn btn-mini {{ 'btn-contorno-rojo' if u.activo else 'btn-contorno-verde' }}">{{ 'Desactivar' if u.activo else 'Reactivar' }}</button>
                                 </form>
-                                </div>
-                            {% else %}
-                                <span class="texto-suave">Cuenta protegida</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="7">No se encontraron cuentas.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </section>
+                            </div>
+                        {% else %}
+                            <span class="texto-suave protegida">{{ icono('candado') }} Protegida</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="bloque-vacio">No se encontraron cuentas{{ ' con «' ~ busqueda ~ '»' if busqueda }}.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 {% endblock %}
