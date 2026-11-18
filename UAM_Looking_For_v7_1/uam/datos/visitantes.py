@@ -20,11 +20,17 @@ def insertar(con, d):
                        :descripcion, :lugar_perdida, :fecha_perdida, ''' + AHORA + ', :foto)', d, con)
 
 
-def listar(estado=None, codigo=''):
-    """Lista del personal: filtra por estado y por parte del código (ya sin comodines); primero lo que falta atender."""
-    return consultar(SQL_REPORTES + ''' WHERE (? IS NULL OR r.estado = ?) AND r.codigo LIKE ?
+def listar(estado=None, codigo='', palabra=''):
+    """Lista del personal: filtra por estado y busca por parte del código (ya sin comodines) o por una palabra en el
+    nombre, el teléfono o el objeto perdido (RF-19); primero lo que falta atender."""
+    from .objetos import patron
+    palabra = (palabra or '').strip()
+    busqueda = ("(r.codigo LIKE :codigo OR r.nombre LIKE :palabra ESCAPE '\\' OR r.telefono LIKE :palabra ESCAPE '\\' "
+                "OR r.objeto_nombre LIKE :palabra ESCAPE '\\')") if palabra else 'r.codigo LIKE :codigo'
+    return consultar(SQL_REPORTES + f''' WHERE (:estado IS NULL OR r.estado = :estado) AND {busqueda}
                      ORDER BY CASE r.estado WHEN 'Pendiente' THEN 0 WHEN 'En revisión' THEN 1 WHEN 'Localizado' THEN 2 ELSE 3 END,
-                     r.id DESC''', (estado, estado, f'%{codigo}%'))
+                     r.id DESC''', {'estado': estado, 'codigo': f'%{codigo}%' if codigo or not palabra else None,
+                      'palabra': patron(palabra) if palabra else None})
 
 
 def buscar(id, con=None):

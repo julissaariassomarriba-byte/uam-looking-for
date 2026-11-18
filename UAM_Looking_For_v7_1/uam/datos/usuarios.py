@@ -2,6 +2,8 @@
 
 Una persona de ventanilla es alguien que trajo o retiró un objeto sin tener cuenta; su fila no tiene contraseña.
 """
+import sqlite3
+
 from .conexion import consultar, ejecutar, transaccion
 
 ES_CUENTA = "(contrasena_hash IS NOT NULL OR rol = 'Administrador')"
@@ -40,14 +42,15 @@ def listar_cuentas(rol=None, busqueda=''):
     """Cuentas del panel de administración. La búsqueda escapa los comodines de LIKE (% y _)."""
     filtro = '%' + busqueda.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
     return consultar(f'''SELECT id, nombre, cif, correo, carrera, rol, activo FROM usuarios
-                         WHERE {ES_CUENTA} AND (? IS NULL OR rol = ?)
+                         WHERE {ES_CUENTA} AND NOT (rol = 'Administrador' AND activo = 0) AND (? IS NULL OR rol = ?)
                            AND (nombre LIKE ? ESCAPE '\\' OR cif LIKE ? ESCAPE '\\' OR correo LIKE ? ESCAPE '\\')
                          ORDER BY CASE rol WHEN 'Administrador' THEN 0 WHEN 'Encargado' THEN 1 ELSE 2 END, nombre''',
                      (rol, rol, filtro, filtro, filtro))
 
 
 def contar_cuentas_por_rol():
-    filas = consultar(f'SELECT rol, COUNT(*) AS total, SUM(activo) AS activos FROM usuarios WHERE {ES_CUENTA} GROUP BY rol')
+    filas = consultar(f'SELECT rol, COUNT(*) AS total, SUM(activo) AS activos FROM usuarios WHERE {ES_CUENTA} '
+                      "AND NOT (rol = 'Administrador' AND activo = 0) GROUP BY rol")
     return {f['rol']: {'total': f['total'], 'activos': f['activos'] or 0} for f in filas}
 
 
@@ -70,6 +73,11 @@ def activar_cuenta_de_persona(id, correo, carrera, rol, contrasena_hash):
     return id
 
 
+def actualizar_perfil(id, correo, carrera, telefono):
+    """Lo que la persona puede corregir de su propio perfil. El nombre, el CIF y el rol solo los cambia el administrador."""
+    ejecutar('UPDATE usuarios SET correo = ?, carrera = ?, telefono = ? WHERE id = ?', (correo, carrera, telefono, id))
+
+
 def cambiar_activo(id, activo):
     ejecutar('UPDATE usuarios SET activo = ? WHERE id = ?', (int(activo), id))
 
@@ -86,6 +94,22 @@ def guardar_admin(nombre, cif, correo):
             correo = f'{cif.lower()}@admin.local'
         return con.execute("INSERT INTO usuarios (nombre, cif, correo, carrera, rol) VALUES (?, ?, ?, 'Administración', 'Administrador')",
                            (nombre, cif, correo)).lastrowid
+
+
+def quitar_admins_sobrantes(cif_actual):
+    """Deja como administrador solo al del .env. Un administrador anterior (por ejemplo el de prueba que venía con
+    el sistema) se borra si nunca hizo nada; si ya figura en el historial o registró algo, se desactiva: no puede
+    entrar ni aparece en la lista de cuentas, pero su nombre se conserva en lo que hizo. Devuelve (borrados, desactivados)."""
+    borrados = desactivados = 0
+    for fila in consultar("SELECT id, activo FROM usuarios WHERE rol = 'Administrador' AND cif IS NOT ?", (cif_actual,)):
+        try:
+            ejecutar('DELETE FROM usuarios WHERE id = ?', (fila['id'],))
+            borrados += 1
+        except sqlite3.IntegrityError:   # tiene movimientos a su nombre: la base no deja borrarlo
+            if fila['activo']:
+                ejecutar('UPDATE usuarios SET activo = 0 WHERE id = ?', (fila['id'],))
+                desactivados += 1
+    return borrados, desactivados
 
 
 def insertar_persona(con, nombre, rol, cif, telefono, correo):

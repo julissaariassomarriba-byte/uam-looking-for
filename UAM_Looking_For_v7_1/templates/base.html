@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#00939c">
     <title>{% block titulo %}UAM Looking For{% endblock %}</title>
+    {% block cabeza %}{% endblock %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
@@ -37,11 +38,11 @@
                     {%- if por_retirar %} <span class="nav-contador" title="Listas para retirar">{{ por_retirar }}</span>{% endif %}</a>
                 <a href="{{ url_for('objetos.guia') }}">{{ icono('guia') }} Guía</a>
             {% endif %}
-            <span class="nav-usuario">
-                <span class="avatar" title="{{ usuario_actual.nombre }}">{{ usuario_actual.nombre[:1]|upper }}</span>
+            <a href="{{ url_for('acceso.perfil') }}" class="nav-usuario" title="Mi perfil">
+                <span class="avatar">{{ usuario_actual.nombre[:1]|upper }}</span>
                 <span class="nav-nombre">{{ usuario_actual.nombre }}</span>
                 <span class="rol-chip rol-{{ usuario_actual.rol|lower }}">{{ usuario_actual.rol }}</span>
-            </span>
+            </a>
             <form method="POST" action="{{ url_for('acceso.logout') }}" class="nav-salir">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit">{{ icono('salir') }} Cerrar sesión</button>
@@ -57,7 +58,7 @@
         {% block contenido %}{% endblock %}
     </main>
 
-    <footer>UAM Looking For · Proyecto final de Análisis y Diseño de Sistemas</footer>
+    <footer>UAM Looking For · Proyecto final de Programación Estructurada</footer>
 
     {% if usuario_actual %}
     <script>

@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% from 'parciales/macros.html' import icono %}
+{% block titulo %}Comprobante de entrega #{{ c.objeto.id }} | UAM Looking For{% endblock %}
+
+{% block contenido %}
+{% set o, e = c.objeto, c.entrega %}
+<div class="comprobante-barra no-imprimir">
+    <a href="{{ url_for('objetos.detalle', id=o.id) }}" class="btn btn-claro">← Volver al objeto</a>
+    <button type="button" class="btn" onclick="window.print()">{{ icono('descargar') }} Imprimir</button>
+</div>
+
+<article class="panel comprobante">
+    <header class="comprobante-cabecera">
+        <div>
+            <p class="comprobante-marca"><span class="logo-pastilla">UAM</span> Looking For</p>
+            <h2>Comprobante de entrega</h2>
+            <p class="texto-suave">Oficina de objetos perdidos · Universidad Americana</p>
+        </div>
+        <div class="comprobante-codigo">
+            <span>Código</span>
+            <strong>#{{ o.id }}</strong>
+        </div>
+    </header>
+
+    <section class="comprobante-bloque">
+        <h3>Objeto</h3>
+        <dl class="comprobante-datos">
+            <dt>Nombre</dt><dd>{{ o.titulo }}</dd>
+            <dt>Categoría</dt><dd>{{ o.categoria }}</dd>
+            <dt>Estaba guardado en</dt><dd>{{ o.ubicacion }}</dd>
+        </dl>
+    </section>
+
+    <section class="comprobante-bloque">
+        <h3>Quién lo retira</h3>
+        <dl class="comprobante-datos">
+            <dt>Nombre</dt><dd>{{ e.nombre }}</dd>
+            <dt>Tipo</dt><dd>{{ 'Personal administrativo' if e.tipo == 'Administrativo' else e.tipo }}</dd>
+            <dt>CIF o cédula</dt><dd>{{ e.cif or 'Sin registrar' }}</dd>
+            <dt>Carrera</dt><dd>{{ e.carrera or '—' }}</dd>
+            <dt>Teléfono</dt><dd>{{ e.telefono or '—' }}</dd>
+        </dl>
+    </section>
+
+    <section class="comprobante-bloque">
+        <h3>Entrega</h3>
+        <dl class="comprobante-datos">
+            <dt>Fecha y hora</dt><dd>{{ e.fecha_entrega[:16] }}</dd>
+            <dt>Entregado por</dt><dd>{{ e.entregado_por_nombre }}</dd>
+        </dl>
+    </section>
+
+    <div class="comprobante-firmas">
+        <div><span class="linea-firma"></span>Firma de quien recibe<br><small>{{ e.nombre }}</small></div>
+        <div><span class="linea-firma"></span>Firma de quien entrega<br><small>{{ e.entregado_por_nombre }}</small></div>
+    </div>
+
+    <p class="comprobante-nota">Este comprobante no incluye las señas ni la descripción interna del objeto: sirven para comprobar
+        quién es el dueño. Impreso el {{ impreso }}.</p>
+</article>
+{% endblock %}

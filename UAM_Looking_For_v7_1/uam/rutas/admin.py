@@ -32,7 +32,8 @@ def panel():
     return render_template('admin/admin_panel.html', por_rol=usuarios.contar_cuentas_por_rol(), por_estado=por_estado,
                            total_objetos=sum(por_estado.values()), reclamaciones_pendientes=reclamaciones.listar('Pendiente'),
                            por_reporte=visitantes.contar_por_estado(), movimientos=objetos.listar_historial(limite=MOVIMIENTOS_RECIENTES),
-                           fotos=objetos.uso_fotos())
+                           fotos=objetos.uso_fotos(), plazos=objetos.contar_plazos(),
+                           por_vencer=objetos.plazos_por_vencer())
 
 
 @bp.route('/usuarios', methods=['GET', 'POST'])

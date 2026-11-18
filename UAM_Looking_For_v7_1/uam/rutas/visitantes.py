@@ -71,8 +71,9 @@ def consultar():
 @personal_requerido
 def panel():
     estado = opcion('estado', ESTADOS_REPORTE)
-    codigo = servicio.limpiar_codigo(request.args.get('codigo'))
-    return render_template('visitantes/reportes_visitantes.html', reportes=visitantes.listar(estado, codigo),
+    buscado = (request.args.get('codigo') or '').strip()[:100]   # código, nombre, teléfono u objeto
+    codigo = servicio.limpiar_codigo(buscado)
+    return render_template('visitantes/reportes_visitantes.html', reportes=visitantes.listar(estado, codigo, buscado),
                            estado_actual=estado, codigo=codigo, conteo=visitantes.contar_por_estado())
 
 

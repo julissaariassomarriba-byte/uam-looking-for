@@ -1,8 +1,16 @@
-# UAM Looking For v9.1.01
+# UAM Looking For v10.1 (versión definitiva)
 
 Sistema de objetos perdidos y encontrados del campus de la Universidad Americana (UAM).
 Hecho solo con **Flask**, **SQLite** (`sqlite3`, incluido en Python), **HTML** y **CSS**. No usa otras librerías:
-el aviso por WhatsApp usa `urllib` y las contraseñas `hashlib`, que vienen con Python.
+el aviso por WhatsApp usa `urllib`, el comprobante por correo `smtplib` y las contraseñas `hashlib`, que vienen con Python.
+
+La **v10** completa los requerimientos funcionales del documento del SGOP **sin cambiar la base de datos**: perfil del
+estudiante, búsqueda por palabra clave y fechas, guía con ubicación y horario, comprobante de entrega (para imprimir y
+firmar, o por correo), plazos de custodia con aviso de vencimiento y panel con los objetos por vencer. Detalle y tabla
+de cumplimiento en `docs/CAMBIOS_v10.md`.
+
+La **v10.1** deja como único administrador al del `.env`: al arrancar quita al administrador de prueba de versiones
+anteriores (lo borra si nunca hizo nada; si figura en el historial, lo desactiva y lo oculta de «Cuentas»).
 
 La v9 reorganiza el código en un paquete (`uam/`) por capas, agrega la **validación cruzada de identidad** (un CIF
 registrado ya no se puede usar con el nombre de otra persona), revisa en el servidor todos los datos de los
@@ -42,6 +50,11 @@ ADMIN_CORREO=admin@ejemplo.edu.ni
 SECRET_KEY=escribe-aqui-un-texto-largo-y-aleatorio
 SITIO_URL=https://tu-usuario.pythonanywhere.com
 WHATSAPP_TOKEN=...            (opcional: ver «WhatsApp»)
+DIAS_OCULTAR=5                (días que un objeto entregado sigue en el catálogo, de 3 a 7)
+PLAZO_OFICINA_DIAS=30         (plazo de custodia en oficina, desde el hallazgo; provisional)
+PLAZO_BODEGA_DIAS=60          (plazo de custodia en bodega, desde que entró; provisional)
+HORARIO_ATENCION=...          (horario oficial que se muestra en la guía)
+SMTP_SERVIDOR=...             (opcional: correo para enviar el comprobante de entrega)
 ```
 
 - La contraseña del administrador solo está en `.env`, nunca en la base de datos.
@@ -55,12 +68,12 @@ WHATSAPP_TOKEN=...            (opcional: ver «WhatsApp»)
 
 | Rol | Entra por | Puede |
 |---|---|---|
-| Estudiante | /login | Ver el catálogo y la guía rápida, reclamar objetos ya entregados y ver «Mis reclamaciones» |
-| Encargado | /login | Recibir objetos (con foto y quién los trae), registrar entregas, mover objetos de ubicación, ver los datos privados, cambiar estados, aceptar o rechazar reclamaciones, ver el historial y descargar el PDF |
+| Estudiante | /login | Buscar en el catálogo (palabra clave, categoría, ubicación y mes), ver la guía rápida, reclamar objetos ya entregados, ver «Mis reclamaciones» y corregir su perfil |
+| Encargado | /login | Recibir objetos (con foto y quién los trae), registrar entregas, mover objetos de ubicación, ver los datos privados, cambiar estados, aceptar o rechazar reclamaciones, ver el historial y descargar el PDF, buscar por código, CIF, carrera, fechas y estado, revisar los plazos de custodia e imprimir o enviar el comprobante de entrega |
 | Administrador | /admin | Todo lo del encargado, además de crear, editar, desactivar y reactivar cuentas, y limpiar el historial |
 | Visitante (sin cuenta) | /visitante | Reportar un objeto perdido con foto y consultar el estado de su reporte |
 
-Los estudiantes pueden crear su propia cuenta con el botón «Crear cuenta», debajo de «Acceder» (/registro): nombre, CIF, correo y contraseña. Siempre reciben el rol Estudiante. Las cuentas de encargados las crea el administrador.
+Los estudiantes pueden crear su propia cuenta con el botón «Crear cuenta», debajo de «Acceder» (/registro): nombre, CIF, correo, carrera y contraseña. En «Mi perfil» (/perfil, al tocar su nombre en el menú) corrigen su correo, carrera y teléfono, y cambian su contraseña. Siempre reciben el rol Estudiante. Las cuentas de encargados las crea el administrador.
 
 ## Recibir un objeto
 
@@ -236,8 +249,8 @@ Una base más antigua que la v6.2 se abre primero con la v6.2.
 
 ### Pruebas
 
-- `python tests/probar_app.py` prueba la aplicación completa (220 pruebas: cuentas, objetos, entregas, reclamaciones,
-  visitantes, WhatsApp con un servidor simulado, seguridad y la validación de identidad). Trabaja en una carpeta temporal:
+- `python tests/probar_app.py` prueba la aplicación completa (310 pruebas: cuentas, objetos, entregas, reclamaciones,
+  visitantes, WhatsApp y correo con servidores simulados, seguridad, validación de identidad y los requerimientos de la v10). Trabaja en una carpeta temporal:
   no toca tu `database.db` ni tu `.env`.
 - `python base_de_datos/probar_bd.py` prueba la base sola (135 pruebas, 97 de ellas negativas). La carpeta
   `base_de_datos/` también tiene el diagrama ER (`.drawio` y `.png`) y los datos de ejemplo.

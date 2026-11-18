@@ -53,6 +53,7 @@ def crear_app(ruta_env=None, ruta_bd=None):
     conexion.crear_tablas()
     cuentas.sincronizar_admin(env)
     objetos.configurar_plazo(env.get('DIAS_OCULTAR'))   # días que un objeto entregado sigue en el catálogo (3 a 7)
+    objetos.configurar_custodia(env.get('PLAZO_OFICINA_DIAS'), env.get('PLAZO_BODEGA_DIAS'))   # plazos de custodia (RF-16)
 
     registrar_seguridad(app)
     for modulo in (acceso, rutas_objetos, rutas_reclamaciones, rutas_visitantes, admin):
@@ -104,6 +105,14 @@ def registrar_errores(app):
         app.register_error_handler(codigo, pagina_error)
 
 
+def url_filtro(**cambios):
+    """Dirección del catálogo con los filtros actuales más los cambios (None quita uno). Así, al elegir una categoría,
+    no se pierden la búsqueda ni los demás filtros."""
+    args = {k: v for k, v in request.args.items() if v}
+    args.update(cambios)
+    return url_for('objetos.inicio', **{k: v for k, v in args.items() if v not in (None, '')})
+
+
 def variables_globales():
     personal, estudiante = comun.es_personal(), comun.tiene_rol(config.ROL_ESTUDIANTE)
     return dict(categorias=config.CATEGORIAS, estados=config.ESTADOS, estados_manuales=config.ESTADOS_MANUALES,
@@ -113,5 +122,6 @@ def variables_globales():
                 pendientes=reclamaciones.contar_por_estado().get('Pendiente', 0) if personal else 0,
                 reportes_nuevos=visitantes.contar_por_estado().get('Pendiente', 0) if personal else 0,
                 objetos_ocultos=objetos.contar_ocultos() if personal else 0, dias_plazo=objetos.dias_plazo(),
+                custodia=objetos.plazos_custodia(), dias_aviso=objetos.DIAS_AVISO, url_filtro=url_filtro,
                 por_retirar=reclamaciones.contar_por_retirar(g.usuario['id']) if estudiante else 0)
 

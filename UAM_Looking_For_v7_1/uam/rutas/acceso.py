@@ -2,7 +2,7 @@
 from flask import Blueprint, flash, g, redirect, render_template, request, session, url_for
 
 from ..servicios import cuentas
-from .comun import avisar
+from .comun import avisar, login_requerido
 
 bp = Blueprint('acceso', __name__)
 
@@ -33,7 +33,7 @@ def registro():
     f = request.form
     if request.method == 'POST':
         ok, resultado = cuentas.registrar_estudiante(f.get('nombre'), f.get('cif'), f.get('correo'), f.get('contrasena'),
-                                                     f.get('confirmar'))
+                                                     f.get('confirmar'), f.get('carrera'))
         if ok:
             session.clear()   # antes del aviso: clear() también borraría el mensaje
             session['usuario_id'] = resultado
@@ -49,3 +49,17 @@ def logout():
     session.clear()
     flash('Has cerrado sesión correctamente.', 'exito')
     return redirect(url_for('admin.panel' if era_admin else 'acceso.login'))
+
+
+@bp.route('/perfil', methods=['GET', 'POST'])
+@login_requerido
+def perfil():
+    """Mi perfil (RF-05): nombre, CIF, carrera y correo. Se corrigen correo, carrera y teléfono, y se cambia la contraseña."""
+    f = request.form
+    if request.method == 'POST':
+        if f.get('accion') == 'contrasena':
+            avisar(*cuentas.cambiar_contrasena(g.usuario, f.get('actual'), f.get('nueva'), f.get('confirmar')))
+        else:
+            avisar(*cuentas.actualizar_perfil(g.usuario, f.get('correo'), f.get('carrera'), f.get('telefono')))
+        return redirect(url_for('acceso.perfil'))
+    return render_template('acceso/perfil.html')

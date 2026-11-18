@@ -8,7 +8,7 @@ from .conexion import AHORA, consultar, ejecutar
 
 def buscar_entrega(objeto_id, con=None):
     return consultar('''SELECT e.id, e.objeto_id, e.retirado_por, e.entregado_por, e.senas, e.fecha_entrega,
-                               r.nombre, r.cif, r.telefono, r.rol AS tipo, p.nombre AS entregado_por_nombre
+                               r.nombre, r.cif, r.telefono, r.correo, r.carrera, r.rol AS tipo, p.nombre AS entregado_por_nombre
                         FROM entregas e JOIN usuarios r ON r.id = e.retirado_por JOIN usuarios p ON p.id = e.entregado_por
                         WHERE e.objeto_id = ?''', (objeto_id,), True, con)
 

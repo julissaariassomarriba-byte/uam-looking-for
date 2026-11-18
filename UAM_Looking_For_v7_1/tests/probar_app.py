@@ -278,7 +278,7 @@ for volver, esperado in [('/objeto/1', '/objeto/1'), ('/reclamaciones?estado=Ace
 nuevo = app.test_client()
 ok('login muestra el botón de registro', 'Crear cuenta' in nuevo.get('/login').get_data(as_text=True))
 ok('página de registro', nuevo.get('/registro').status_code == 200)
-reg = {'nombre': 'Sofía Ruiz', 'cif': '26010099', 'correo': 'sofia@uam.edu.ni', 'contrasena': 'secreta1', 'confirmar': 'secreta1'}
+reg = {'nombre': 'Sofía Ruiz', 'cif': '26010099', 'correo': 'sofia@uam.edu.ni', 'carrera': 'Ingeniería en Sistemas', 'contrasena': 'secreta1', 'confirmar': 'secreta1'}
 r = nuevo.post('/registro', data=dict(reg, confirmar='otra', csrf_token=tok(nuevo, '/registro')), follow_redirects=True).get_data(as_text=True)
 ok('contraseñas distintas rechazadas', 'no coinciden' in r)
 ok('el formulario conserva lo escrito', 'Sofía Ruiz' in r)
@@ -469,7 +469,7 @@ ok('menú del personal: «Visitantes» con el número de pendientes', f'Visitant
 ok('filtro por estado', rep1['codigo'] in pagina(enc, '/reportes-visitantes?estado=Pendiente') and rep1['codigo'] not in pagina(enc, '/reportes-visitantes?estado=Cerrado'))
 ok('búsqueda por parte del código', rep1['codigo'] in pagina(enc, f"/reportes-visitantes?codigo={rep1['codigo'][4:8].lower()}")
    and rep2['codigo'] not in pagina(enc, f"/reportes-visitantes?codigo={rep1['codigo']}"))
-ok('la búsqueda ignora comodines (%)', 'No hay reportes con ese código' in pagina(enc, '/reportes-visitantes?codigo=%25%25%25') or
+ok('la búsqueda ignora comodines (%)', 'No hay reportes que coincidan' in pagina(enc, '/reportes-visitantes?codigo=%25%25%25') or
    rep1['codigo'] in pagina(enc, '/reportes-visitantes?codigo=%25'))
 ok('el administrador también gestiona reportes', adm.get('/reportes-visitantes').status_code == 200 and 'Reportes de visitantes' in pagina(adm, '/admin'))
 post(enc, '/reportar', dict(datos, titulo='Mochila azul Totto', descripcion='Mochila Totto azul con cuaderno', categoria='Ropa/Accesorios',
@@ -700,7 +700,7 @@ ok('v9 entrega: con su nombre se registra a nombre de Carlos', 'Entrega registra
 conexion.ejecutar("INSERT INTO usuarios (nombre, cif, telefono, rol) VALUES ('Marta Ruiz', '26010300', '8000 1111', 'Estudiante')")
 nueva = app.test_client()
 r = nueva.post('/registro', data={'nombre': 'Impostor Uno', 'cif': '26010300', 'correo': 'imp@uam.edu.ni', 'contrasena': 'secreta1',
-                                  'confirmar': 'secreta1', 'csrf_token': tok(nueva, '/registro')}, follow_redirects=True).get_data(as_text=True)
+                                  'confirmar': 'secreta1', 'carrera': 'Derecho', 'csrf_token': tok(nueva, '/registro')}, follow_redirects=True).get_data(as_text=True)
 ok('v9 registro: el CIF de un estudiante de ventanilla con otro nombre no se usa', 'ya está registrado' in r
    and fila("SELECT nombre, contrasena_hash FROM usuarios WHERE cif='26010300'") == ('Marta Ruiz', None))
 r = post(a9, '/admin/usuarios', {'nombre': 'Otro Nombre', 'cif': pedro, 'correo': 'otro@uam.edu.ni', 'rol': 'Estudiante', 'contrasena': 'clave123'})
@@ -800,6 +800,171 @@ ok('plazo: la ficha dice desde cuándo está oculto y no ofrece borrar', 'Oculto
 ok('plazo: el objeto sigue completo en la base', fila('SELECT COUNT(*) FROM objetos o JOIN entregas e ON e.objeto_id = o.id WHERE o.id = ?', (oc,))[0] == 1)
 datos_objetos.configurar_plazo(None)
 ok('plazo: con el plazo normal vuelve a verse (recién entregada)', 'Cartera café' in sf.get('/').get_data(as_text=True))
+# ====================== v10: requerimientos funcionales (perfil, búsqueda, plazos, comprobante, guía) ======================
+import datetime  # noqa: E402
+import smtplib  # noqa: E402
+alerta = lambda r: re.findall(r'class="alerta[^"]*"[^>]*>([^<]+)', r)
+
+# --- RF-05: perfil del estudiante y carrera en el registro ---
+nv = app.test_client()
+datos_reg = {'nombre': 'Rita Campos', 'cif': '26010777', 'correo': 'rita@uam.edu.ni', 'contrasena': 'clave777', 'confirmar': 'clave777'}
+r = nv.post('/registro', data=dict(datos_reg, csrf_token=tok(nv, '/registro')), follow_redirects=True).get_data(as_text=True)
+ok('v10 RF-05: el registro sin carrera se rechaza', 'Escribe tu carrera' in r and not fila("SELECT 1 FROM usuarios WHERE cif='26010777'"))
+r = nv.post('/registro', data=dict(datos_reg, carrera='Arquitectura', csrf_token=tok(nv, '/registro')), follow_redirects=True).get_data(as_text=True)
+ok('v10 RF-05: el registro guarda la carrera', fila("SELECT carrera FROM usuarios WHERE cif='26010777'") == ('Arquitectura',))
+perfil = nv.get('/perfil').get_data(as_text=True)
+ok('v10 RF-05: «Mi perfil» muestra nombre, CIF, carrera y correo', all(t in perfil for t in ('Rita Campos', '26010777', 'Arquitectura', 'rita@uam.edu.ni')))
+ok('v10 RF-05: el menú enlaza a «Mi perfil»', 'href="/perfil"' in perfil)
+r = post(nv, '/perfil', {'accion': 'datos', 'correo': 'rita@uam.edu.ni', 'carrera': '', 'telefono': ''})
+ok('v10 RF-05: un estudiante no puede dejar vacía la carrera', 'Escribe tu carrera' in r)
+r = post(nv, '/perfil', {'accion': 'datos', 'correo': 'ana@uam.edu.ni', 'carrera': 'Arquitectura', 'telefono': ''})
+ok('v10 RF-05: no puede usar el correo de otra cuenta', 'ya pertenece a otra cuenta' in r)
+r = post(nv, '/perfil', {'accion': 'datos', 'correo': 'Rita.Campos@uam.edu.ni', 'carrera': 'Diseño Gráfico', 'telefono': '8777 1234'})
+ok('v10 RF-05: corrige correo, carrera y teléfono', 'Tus datos se guardaron' in r
+   and fila("SELECT correo, carrera, telefono, nombre FROM usuarios WHERE cif='26010777'") == ('rita.campos@uam.edu.ni', 'Diseño Gráfico', '8777 1234', 'Rita Campos'))
+r = post(nv, '/perfil', {'accion': 'datos', 'correo': 'rita.campos@uam.edu.ni', 'carrera': 'Diseño', 'telefono': '12'})
+ok('v10 RF-05: teléfono inválido se rechaza', 'teléfono válido' in r)
+r = post(nv, '/perfil', {'accion': 'contrasena', 'actual': 'mala', 'nueva': 'nueva777', 'confirmar': 'nueva777'})
+ok('v10 RF-05: cambiar contraseña exige la actual', 'actual no es correcta' in r)
+r = post(nv, '/perfil', {'accion': 'contrasena', 'actual': 'clave777', 'nueva': 'nueva777', 'confirmar': 'otra777'})
+ok('v10 RF-05: la nueva debe repetirse igual', 'no coinciden' in r)
+r = post(nv, '/perfil', {'accion': 'contrasena', 'actual': 'clave777', 'nueva': 'nueva777', 'confirmar': 'nueva777'})
+otra_vez = app.test_client()
+ok('v10 RF-05: la contraseña cambia y la nueva sirve para entrar', 'contraseña se cambió' in r
+   and 'Bienvenido' in entrar(otra_vez, '26010777', 'nueva777') and 'Bienvenido' not in entrar(app.test_client(), '26010777', 'clave777'))
+ok('v10 RF-05: el administrador ve su perfil pero no lo edita aquí', 'archivo .env' in a9.get('/perfil').get_data(as_text=True)
+   and 'archivo .env' in post(a9, '/perfil', {'accion': 'datos', 'correo': 'x@uam.edu.ni', 'carrera': 'x', 'telefono': ''}))
+
+# --- RF-10 y RF-19: búsqueda y filtros ---
+r = recibir(sin_persona='1', titulo='Paraguas rojo', descripcion='Paraguas rojo marca Totto, serie QX9123', descripcion_publica='Paraguas rojo plegable')
+pid = fila("SELECT id FROM objetos WHERE titulo='Paraguas rojo'")[0]
+est = sf.get('/?q=plegable').get_data(as_text=True)
+ok('v10 RF-10: el estudiante busca por palabra clave en lo público', 'Paraguas rojo' in est and 'Gorra roja' not in est)
+ok('v10 RF-10: no encuentra por la descripción interna (validación)', 'Paraguas rojo' not in sf.get('/?q=QX9123').get_data(as_text=True))
+ok('v10 RF-19: el personal sí encuentra por la descripción interna', 'Paraguas rojo' in e9.get('/?q=QX9123').get_data(as_text=True))
+ok('v10 RF-19: el personal busca por código (#)', 'Paraguas rojo' in e9.get(f'/?q=%23{pid}').get_data(as_text=True))
+ok('v10 RF-19: el personal busca por el CIF de quien lo retiró', 'Cartera café' in e9.get(f'/?q={pedro}').get_data(as_text=True))
+ok('v10 RF-19: filtra por estado', 'Cartera café' in e9.get('/?estado=Entregado').get_data(as_text=True)
+   and 'Paraguas rojo' not in e9.get('/?estado=Entregado').get_data(as_text=True))
+ok('v10 RF-19: filtra por rango de fechas', 'Paraguas rojo' in e9.get(f'/?desde={hoy}&hasta={hoy}').get_data(as_text=True)
+   and 'Paraguas rojo' not in e9.get('/?hasta=2000-01-01').get_data(as_text=True))
+ok('v10 RF-10: el estudiante filtra por mes', 'Paraguas rojo' in sf.get(f'/?mes={hoy[:7]}').get_data(as_text=True)
+   and 'Paraguas rojo' not in sf.get('/?mes=2000-01').get_data(as_text=True))
+ok('v10 RF-10: un mes mal escrito se ignora', 'Paraguas rojo' in sf.get('/?mes=abc').get_data(as_text=True))
+ok('v10: la búsqueda no trata % como comodín', 'Ningún objeto coincide' in sf.get('/?q=%25').get_data(as_text=True))
+ok('v10: el estudiante no puede filtrar por estado ni usar «Por vencer»', 'Cartera café' in sf.get('/?estado=Activo').get_data(as_text=True)
+   and 'Plazos por vencer' not in sf.get('/?vencer=1').get_data(as_text=True))
+ok('v10 RF-10: la categoría conserva la búsqueda', '?q=plegable&amp;categoria=Llaves' in est or 'q=plegable' in re.search(r'href="([^"]*categoria=Llaves[^"]*)"', est).group(1))
+rep_busca = todas('SELECT codigo, nombre FROM reportes_visitantes LIMIT 1')
+if rep_busca:
+    ok('v10 RF-19: los reportes de visitantes se buscan por nombre', rep_busca[0][0] in e9.get('/reportes-visitantes?codigo=' + rep_busca[0][1].split()[0]).get_data(as_text=True))
+
+# --- RF-16 y RF-18: plazos de custodia ---
+from uam.datos import objetos as dobj  # noqa: E402
+dobj.configurar_custodia('0', 'abc'); c1 = dobj.plazos_custodia()
+dobj.configurar_custodia(None, None); c2 = dobj.plazos_custodia()
+ok('v10 RF-16: los plazos se configuran (mínimo 1 día; si no son válidos, 30 y 60)', c1 == {'oficina': 1, 'bodega': 60} and c2 == {'oficina': 30, 'bodega': 60}, (c1, c2))
+hace = lambda d: (datetime.date.fromisoformat(hoy) - datetime.timedelta(days=d)).isoformat()
+recibir(sin_persona='1', titulo='Sombrilla vieja', fecha=hace(28))
+recibir(sin_persona='1', titulo='Bufanda olvidada', fecha=hace(40))
+sv, bv = (fila("SELECT id FROM objetos WHERE titulo=?", (t,))[0] for t in ('Sombrilla vieja', 'Bufanda olvidada'))
+ficha = e9.get(f'/objeto/{sv}').get_data(as_text=True)
+ok('v10 RF-16: calcula la fecha de vencimiento de cada objeto', 'Plazo de custodia hasta el ' + (datetime.date.fromisoformat(hoy) + datetime.timedelta(days=2)).isoformat() in ficha)
+cat = e9.get('/').get_data(as_text=True)
+ok('v10 RF-16: el catálogo del personal avisa «vence en 2 días» y «vencido»', 'Vence en 2 días' in cat and 'Plazo vencido hace 10 días' in cat)
+vence = e9.get('/?vencer=1').get_data(as_text=True)
+ok('v10 RF-16: «Por vencer» lista solo lo urgente, primero lo vencido', 'Bufanda olvidada' in vence and 'Sombrilla vieja' in vence
+   and 'Paraguas rojo' not in vence and vence.index('Bufanda olvidada') < vence.index('Sombrilla vieja'))
+panel = a9.get('/admin').get_data(as_text=True)
+ok('v10 RF-18: el panel muestra los próximos a vencer y se actualiza solo', 'Plazos de custodia' in panel and 'Sombrilla vieja' in panel
+   and 'Bufanda olvidada' in panel and 'http-equiv="refresh"' in panel)
+ok('v10 RF-16: el estudiante no ve los plazos internos', 'Vence en' not in sf.get('/').get_data(as_text=True)
+   and 'Plazo de custodia' not in sf.get(f'/objeto/{sv}').get_data(as_text=True))
+post(e9, f'/objeto/{bv}', {'accion': 'estado', 'estado': 'En bodega'})
+ficha = e9.get(f'/objeto/{bv}').get_data(as_text=True)
+ok('v10 RF-16: en bodega el plazo cuenta desde que entró', 'desde que entró a bodega' in ficha
+   and 'Plazo de custodia hasta el ' + (datetime.date.fromisoformat(hoy) + datetime.timedelta(days=60)).isoformat() in ficha)
+ok('v10 RF-16: un objeto entregado ya no tiene plazo de custodia', 'Plazo de custodia' not in e9.get(f'/objeto/{oc}').get_data(as_text=True))
+
+# --- RF-12 y RF-14: comprobante de entrega ---
+comp = e9.get(f'/objeto/{oc}/comprobante').get_data(as_text=True)
+ok('v10 RF-12: comprobante para imprimir con código, quien retira, fecha, quien entrega y firmas',
+   all(t in comp for t in (f'#{oc}', 'Pedro Gómez', pedro, 'Firma de quien recibe', 'Firma de quien entrega', 'window.print()')))
+ok('v10 RF-14: el comprobante no incluye las señas (validación)', 'dos tarjetas' not in comp)
+ok('v10 RF-14: solo el personal ve el comprobante', sf.get(f'/objeto/{oc}/comprobante').status_code == 302)
+ok('v10 RF-14: sin entrega no hay comprobante (404)', e9.get(f'/objeto/{pid}/comprobante').status_code == 404)
+ok('v10 RF-14: la ficha ofrece imprimir y enviar', 'Comprobante para imprimir' in e9.get(f'/objeto/{oc}').get_data(as_text=True))
+r = post(e9, f'/objeto/{oc}/comprobante/enviar', {'correo': ''})
+ok('v10 RF-14: sin correo registrado pide escribirlo', 'no tiene correo registrado' in r, alerta(r))
+r = post(e9, f'/objeto/{oc}/comprobante/enviar', {'correo': 'pedro@correo.com'})
+ok('v10 RF-14: sin SMTP en el .env lo dice y sugiere imprimir', 'no está configurado' in r, alerta(r))
+enviados = []
+class SMTPFalso:
+    def __init__(self, servidor, puerto, timeout=None): enviados.append(('conexion', servidor, puerto))
+    def starttls(self, context=None): enviados.append(('tls',))
+    def login(self, u, c): enviados.append(('login', u))
+    def send_message(self, m): enviados.append(('mensaje', m['To'], m['Subject'], m.get_content()))
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+original_smtp = smtplib.SMTP
+smtplib.SMTP = SMTPFalso
+with open(ENV, 'a', encoding='utf-8') as archivo:
+    archivo.write('\nSMTP_SERVIDOR=smtp.prueba.local\nSMTP_PUERTO=587\nSMTP_USUARIO=oficina\nSMTP_CONTRASENA=x\nSMTP_REMITENTE=oficina@uam.edu.ni\n')
+r = post(e9, f'/objeto/{oc}/comprobante/enviar', {'correo': 'Pedro@Correo.com'})
+mensaje = [e for e in enviados if e[0] == 'mensaje']
+ok('v10 RF-14: con SMTP envía el comprobante al correo', 'Comprobante enviado a pedro@correo.com' in r and mensaje
+   and mensaje[0][1] == 'pedro@correo.com' and f'#{oc}' in mensaje[0][3] and ('tls',) in enviados, (alerta(r), enviados))
+ok('v10 RF-14: el correo tampoco lleva las señas', mensaje and 'dos tarjetas' not in mensaje[0][3])
+ok('v10 RF-14: correo inválido se rechaza', 'no es válido' in post(e9, f'/objeto/{oc}/comprobante/enviar', {'correo': 'no-es-correo'}))
+class SMTPCaido(SMTPFalso):
+    def __init__(self, *a, **k): raise OSError('sin red')
+smtplib.SMTP = SMTPCaido
+ok('v10 RF-14: si el servidor de correo falla, lo dice sin romperse', 'No se pudo enviar' in post(e9, f'/objeto/{oc}/comprobante/enviar', {'correo': 'p@correo.com'}))
+smtplib.SMTP = original_smtp
+
+# --- RF-11: guía con ubicación y horario ---
+guia = sf.get('/guia').get_data(as_text=True)
+ok('v10 RF-11: la guía dice dónde se guardan los objetos y cómo entregar uno', all(u in guia for u in ('Vida Estudiantil', 'Sala Docente', 'Edificio A'))
+   and 'Encontré algo' in guia and 'Horario de atención' not in guia)
+with open(ENV, 'a', encoding='utf-8') as archivo:
+    archivo.write('HORARIO_ATENCION=Lunes a viernes de prueba\n')
+ok('v10 RF-11: muestra el horario del .env', 'Horario de atención:</strong> Lunes a viernes de prueba' in sf.get('/guia').get_data(as_text=True))
+# ====================== v10.1: solo queda el administrador del .env (Nancy) ======================
+def caso_admin(con_movimientos):
+    ruta_bd, ruta_env = os.path.join(TMP, f'admins_{con_movimientos}.db'), os.path.join(TMP, f'admins_{con_movimientos}.env')
+    with open(ruta_env, 'w', encoding='utf-8') as f:   # como estaba antes: el admin de prueba en el .env
+        f.write('ADMIN_USUARIO=ADMIN\nADMIN_CONTRASENA=prueba-vieja\nADMIN_NOMBRE=Administrador UAM\nADMIN_CORREO=admin.lookingfor@uamv.edu.ni\nSECRET_KEY=x\n')
+    viejo = crear_app(ruta_env, ruta_bd)
+    if con_movimientos:   # el admin de prueba alcanzó a registrar un objeto (queda en el historial)
+        c = viejo.test_client()
+        c.post('/admin', data={'cif': 'ADMIN', 'contrasena': 'prueba-vieja', 'csrf_token': tok(c, '/admin')})
+        post(c, '/reportar', dict(base9, envio='admin-viejo', sin_persona='1', titulo='Objeto del admin viejo'))
+    with open(ruta_env, 'w', encoding='utf-8') as f:   # ahora: Nancy en el .env
+        f.write('ADMIN_USUARIO=NancySanteliz\nADMIN_CONTRASENA=clave-de-nancy\nADMIN_NOMBRE=Nancy\nSECRET_KEY=x\n')
+    nuevo_app = crear_app(ruta_env, ruta_bd)
+    con = sqlite3.connect(ruta_bd)
+    admins = con.execute("SELECT nombre, cif, activo FROM usuarios WHERE rol = 'Administrador' ORDER BY id").fetchall()
+    historial = con.execute("SELECT u.nombre FROM historial h JOIN usuarios u ON u.id = h.usuario_id").fetchall()
+    con.close()
+    n = nuevo_app.test_client()
+    n.post('/admin', data={'cif': 'NancySanteliz', 'contrasena': 'clave-de-nancy', 'csrf_token': tok(n, '/admin')})
+    cuentas_html = n.get('/admin/usuarios').get_data(as_text=True)
+    v = nuevo_app.test_client()
+    entra_viejo = v.post('/admin', data={'cif': 'ADMIN', 'contrasena': 'prueba-vieja', 'csrf_token': tok(v, '/admin')},
+                         follow_redirects=True).get_data(as_text=True)
+    return admins, historial, cuentas_html, entra_viejo
+
+admins, historial, html_cuentas, entra = caso_admin(False)
+ok('v10.1: el admin de prueba sin movimientos se borra y queda solo Nancy', admins == [('Nancy', 'NANCYSANTELIZ', 1)], admins)
+ok('v10.1: «Cuentas» ya no muestra al Administrador UAM', 'Administrador UAM' not in html_cuentas and 'Nancy' in html_cuentas)
+ok('v10.1: la pestaña Administración cuenta 1', re.search(r'Administración <span>1</span>', html_cuentas) is not None)
+ok('v10.1: el admin viejo no puede entrar', 'Credenciales de administrador incorrectas' in entra)
+admins, historial, html_cuentas, entra = caso_admin(True)
+ok('v10.1: si el admin de prueba registró algo, se desactiva (no se borra)', ('Administrador UAM', 'ADMIN', 0) in admins
+   and ('Nancy', 'NANCYSANTELIZ', 1) in admins and len(admins) == 2, admins)
+ok('v10.1: su nombre se conserva en el historial', ('Administrador UAM',) in historial)
+ok('v10.1: desactivado tampoco aparece en «Cuentas» ni puede entrar', 'Administrador UAM' not in html_cuentas
+   and 'Credenciales de administrador incorrectas' in entra)
 ok('v9: integridad al final', fila('PRAGMA integrity_check')[0] == 'ok' and not todas('PRAGMA foreign_key_check'))
 
 print(f'\n{sum(resultados)}/{len(resultados)} pruebas pasaron')

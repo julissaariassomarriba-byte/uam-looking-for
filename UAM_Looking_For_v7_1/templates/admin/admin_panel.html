@@ -5,6 +5,9 @@
 
 {% block titulo %}Panel de administración | UAM Looking For{% endblock %}
 
+{# RF-18: el panel se actualiza solo cada minuto (no tiene formularios que se puedan perder). #}
+{% block cabeza %}<meta http-equiv="refresh" content="60">{% endblock %}
+
 {% block contenido %}
 <div class="titulo-pagina">
     <div>
@@ -48,6 +51,26 @@
 
 <div class="panel-columnas">
     <div class="columna-apilada">
+        <section class="panel bloque">
+            <header class="bloque-cabecera">
+                <h3>Plazos de custodia <span class="contador {{ 'contador-alerta' if plazos.vencidos }}">{{ plazos.vencidos + plazos.por_vencer }}</span></h3>
+                {% if por_vencer %}<a href="{{ url_for('objetos.inicio', vencer=1) }}" class="enlace-vertodo">Ver todos →</a>{% endif %}
+            </header>
+            {% for o in por_vencer %}
+                {% set d = o.dias_restantes %}
+                <a href="{{ url_for('objetos.detalle', id=o.id) }}" class="fila-bloque">
+                    <span class="fila-icono">{{ icono(categorias.get(o.categoria, 'paquete')) }}</span>
+                    <span class="fila-texto"><strong>#{{ o.id }} {{ o.titulo }}</strong>
+                        <span class="texto-suave">{{ o.estado }} · {{ o.ubicacion }}</span></span>
+                    <span class="fila-fecha plazo-custodia {{ 'vencido' if d < 0 else 'por-vencer' }}">
+                        {{- 'Venció' if d < 0 else ('Vence hoy' if d == 0 else 'En ' ~ d ~ (' día' if d == 1 else ' días')) }}</span>
+                </a>
+            {% else %}
+                <p class="bloque-vacio">{{ icono('check') }} Ningún plazo vence en los próximos {{ dias_aviso }} días.</p>
+            {% endfor %}
+            <p class="bloque-pie texto-suave">Oficina: {{ custodia.oficina }} días desde el hallazgo · Bodega: {{ custodia.bodega }} días desde que entró.</p>
+        </section>
+
         <section class="panel bloque">
             <header class="bloque-cabecera">
                 <h3>Reclamaciones pendientes <span class="contador">{{ reclamaciones_pendientes|length }}</span></h3>

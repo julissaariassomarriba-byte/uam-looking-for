@@ -760,3 +760,84 @@ a.fila-bloque:hover { background: #f8fbfb; }
 .limpiezas-titulo { margin: 1.3rem 0 0.4rem; font-weight: 600; }
 .limpiezas { margin: 0; padding-left: 1.1rem; font-size: 0.9rem; }
 .limpiezas li { margin: 0.2rem 0; }
+
+/* ======================================================================
+   14. Versión 10: búsqueda, plazos de custodia, comprobante y perfil
+   ====================================================================== */
+
+/* Búsqueda del catálogo (RF-10 y RF-19) */
+.buscador-catalogo { flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 0.7rem; padding: 0.8rem 1rem; margin-bottom: 1.2rem; }
+.buscador-catalogo label { margin: 0; }
+.buscador-texto { flex: 1 1 16rem; font-weight: 400; display: flex; align-items: center; gap: 0.5rem; padding: 0 0.7rem; border: 1px solid var(--borde);
+                  border-radius: 2px; background: #fff; color: var(--texto-suave); }
+.buscador-texto:focus-within { border-color: var(--primario); box-shadow: var(--foco); }
+.buscador-texto input { border: none; padding: 0.7rem 0; box-shadow: none; }
+.buscador-texto input:focus { box-shadow: none; }
+.buscador-campo { display: grid; gap: 0.25rem; font-weight: 600; font-size: 0.78rem; font-weight: 600; color: var(--texto-suave); flex: 0 1 9.5rem; }
+.buscador-campo input, .buscador-campo select { padding: 0.6rem; font-size: 0.9rem; }
+.buscador-catalogo .btn { padding-top: 0.7rem; padding-bottom: 0.7rem; }
+
+/* Plazos de custodia (RF-16 y RF-18) */
+.plazo-custodia { font-size: 0.82rem; color: var(--texto-suave); }
+.plazo-custodia.por-vencer { color: var(--amarillo); font-weight: 600; }
+.plazo-custodia.vencido { color: var(--rojo); font-weight: 600; }
+.plazo-custodia-aviso.vencido { background: #fdecea; border-color: #f1c4bf; }
+.filtro-rol a.con-alerta span { background: #fdecea; color: var(--rojo); }
+.contador-alerta { background: #fdecea; color: var(--rojo); font-weight: 700; }
+.bloque-pie { margin: 0; padding: 0.6rem 1.1rem 0.9rem; font-size: 0.8rem; }
+
+/* Comprobante de entrega (RF-12 y RF-14) */
+.comprobante-acciones { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0.8rem 0 1rem; }
+.form-correo { flex-direction: row; flex: 1 1 15rem; gap: 0.4rem; }
+.form-correo input { padding: 0.45rem 0.6rem; font-size: 0.85rem; }
+.comprobante-barra { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 1rem; max-width: 46rem; margin-inline: auto; }
+.comprobante { max-width: 46rem; margin: 0 auto; padding: 2rem 2.2rem; }
+.comprobante-cabecera { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: 1.2rem; border-bottom: 2px solid var(--primario); }
+.comprobante-cabecera h2 { margin: 0.3rem 0 0.2rem; }
+.comprobante-marca { font-weight: 700; color: var(--primario-oscuro); margin: 0; }
+.comprobante-codigo { text-align: right; }
+.comprobante-codigo span { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--texto-suave); }
+.comprobante-codigo strong { font-size: 2rem; color: var(--primario-oscuro); }
+.comprobante-bloque { padding: 1rem 0; border-bottom: 1px solid var(--borde); }
+.comprobante-bloque h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--texto-suave); margin-bottom: 0.6rem; }
+.comprobante-datos { display: grid; grid-template-columns: 11rem 1fr; gap: 0.35rem 1rem; margin: 0; }
+.comprobante-datos dt { color: var(--texto-suave); }
+.comprobante-datos dd { margin: 0; font-weight: 600; }
+.comprobante-firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; margin: 3rem 0 1.5rem; text-align: center; font-size: 0.88rem; }
+.linea-firma { display: block; height: 2.5rem; margin-bottom: 0.4rem; border-bottom: 1px solid var(--texto); }
+.comprobante-nota { font-size: 0.78rem; color: var(--texto-suave); margin: 0; }
+
+@media print {
+    .navbar, footer, .no-imprimir, .alerta { display: none !important; }
+    body { background: #fff; }
+    .contenedor { padding: 0; max-width: none; }
+    .comprobante { border: none; box-shadow: none; padding: 0; max-width: none; }
+}
+
+/* Mi perfil (RF-05) */
+a.nav-usuario { color: inherit; text-decoration: none; border-radius: 2px; }
+a.nav-usuario:hover .nav-nombre { text-decoration: underline; }
+.perfil { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1.2rem; align-items: start; }
+.perfil-tarjeta, .perfil-formulario { padding: 1.3rem 1.5rem; }
+.perfil-cabecera { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 1.1rem; }
+.perfil-cabecera h3 { margin: 0 0 0.3rem; }
+.perfil-cabecera .avatar-cuenta { width: 3.2rem; height: 3.2rem; font-size: 1.15rem; }
+.perfil-datos { font-size: 0.92rem; gap: 0.45rem 0.9rem; }
+.perfil-formulario h3 { display: flex; align-items: center; gap: 0.5rem; color: var(--primario-oscuro); font-size: 1.02rem; margin-bottom: 0.9rem; }
+.perfil-formulario .btn { margin-top: 0.4rem; }
+
+/* Guía: dónde y cuándo (RF-11) */
+.guia-destacada { border-top: 3px solid var(--primario); }
+.lugares-guia { list-style: none; padding: 0; margin: 0.6rem 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.lugares-guia li { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.75rem; background: var(--primario-suave);
+                   color: var(--primario-oscuro); border-radius: 2px; font-weight: 600; font-size: 0.9rem; }
+.horario-guia { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.7rem; }
+
+@media (max-width: 640px) {
+    .buscador-campo { flex: 1 1 45%; }
+    .buscador-catalogo .btn { flex: 1 1 auto; }
+    .comprobante { padding: 1.3rem 1.1rem; }
+    .comprobante-datos { grid-template-columns: 1fr; gap: 0.1rem; }
+    .comprobante-datos dd { margin-bottom: 0.4rem; }
+    .comprobante-firmas { grid-template-columns: 1fr; gap: 1.8rem; }
+}

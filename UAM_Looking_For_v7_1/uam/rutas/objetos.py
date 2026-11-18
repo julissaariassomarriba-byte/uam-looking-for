@@ -1,15 +1,19 @@
 """Catálogo, ficha de cada objeto, recepción, entrega e historial."""
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, session, url_for
 
-from ..config import CATEGORIAS, ROL_ADMIN, UBICACIONES
+import re
+
+from ..config import CATEGORIAS, ESTADOS, ROL_ADMIN, UBICACIONES
 from ..datos import objetos, reclamaciones
 from ..datos.conexion import ahora, hoy
 from ..seguridad import nuevo_token
 from ..servicios import objetos as servicio_objetos
+from ..servicios import comprobantes
 from ..servicios import historial as servicio_historial
 from ..servicios import reclamaciones as servicio_reclamaciones
 from ..utilidades import imagenes, reporte_pdf
-from .comun import avisar, es_personal, login_requerido, opcion, personal_requerido, requiere, tiene_rol
+from ..validacion import fecha_valida
+from .comun import avisar, entorno, es_personal, login_requerido, opcion, personal_requerido, requiere, tiene_rol
 
 bp = Blueprint('objetos', __name__)
 ENVIOS_RECORDADOS = 10   # formularios de recepción recordados para no guardar dos veces el mismo objeto
@@ -21,9 +25,19 @@ def inicio():
     categoria, ubicacion = opcion('categoria', CATEGORIAS), opcion('ubicacion', UBICACIONES)
     personal = es_personal()
     # Los objetos entregados hace más del plazo ya no salen en el catálogo; el personal los revisa en «Ocultos».
+    # «Por vencer» (solo personal): bajo custodia con 3 días o menos de plazo, o ya vencidos (RF-16).
     ver_ocultos = personal and request.args.get('ocultos') == '1'
-    return render_template('objetos/index.html', objetos=objetos.listar(categoria, ubicacion, publicos=not personal, ocultos=ver_ocultos),
-                           categoria_actual=categoria, ubicacion_actual=ubicacion, ver_ocultos=ver_ocultos,
+    ver_vencer = personal and not ver_ocultos and request.args.get('vencer') == '1'
+    # Búsqueda (RF-10 y RF-19): palabra clave para todos; el estudiante filtra por mes y el personal por fechas y estado.
+    filtros = {'q': (request.args.get('q') or '').strip()[:100] or None,
+               'mes': valor_si(request.args.get('mes'), lambda v: re.fullmatch(r'\d{4}-\d{2}', v)) if not personal else None,
+               'desde': valor_si(request.args.get('desde'), fecha_valida) if personal else None,
+               'hasta': valor_si(request.args.get('hasta'), fecha_valida) if personal else None,
+               'estado': opcion('estado', ESTADOS) if personal else None}
+    lista = objetos.listar(categoria, ubicacion, publicos=not personal, ocultos=ver_ocultos, por_vencer=ver_vencer, **filtros)
+    return render_template('objetos/index.html', objetos=lista, filtros=filtros, buscando=any(filtros.values()),
+                           categoria_actual=categoria, ubicacion_actual=ubicacion, ver_ocultos=ver_ocultos, ver_vencer=ver_vencer,
+                           meses=objetos.meses_con_objetos() if not personal else [], plazos=objetos.contar_plazos() if personal else {},
                            por_categoria=objetos.contar_por('categoria', visibles=True),
                            por_estado=objetos.contar_por('estado', visibles=True),
                            por_ubicacion=objetos.contar_por('ubicacion', visibles=True))
@@ -39,10 +53,33 @@ def foto(id):
     return Response(f['foto'], mimetype=imagenes.formato(f['foto']), headers={'Cache-Control': 'private, max-age=86400'})
 
 
+def valor_si(valor, valido):
+    """El valor de un filtro solo si tiene el formato esperado; si no, se ignora (sin filtro)."""
+    valor = (valor or '').strip()
+    return valor if valor and valido(valor) else None
+
+
 @bp.route('/guia')
 @login_requerido
 def guia():
-    return render_template('objetos/guia.html')
+    return render_template('objetos/guia.html', horario=entorno().get('HORARIO_ATENCION', '').strip())
+
+
+@bp.route('/objeto/<int:id>/comprobante')
+@personal_requerido
+def comprobante(id):
+    """Comprobante de entrega para imprimir (con firmas) o para revisar antes de enviarlo por correo."""
+    c = comprobantes.buscar(id)
+    if not c:
+        abort(404)
+    return render_template('objetos/comprobante.html', c=c, impreso=ahora()[:16])
+
+
+@bp.route('/objeto/<int:id>/comprobante/enviar', methods=['POST'])
+@personal_requerido
+def enviar_comprobante(id):
+    avisar(*comprobantes.enviar(id, request.form.get('correo'), entorno()))
+    return redirect(url_for('objetos.detalle', id=id))
 
 
 @bp.route('/objeto/<int:id>', methods=['GET', 'POST'])

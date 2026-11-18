@@ -10,6 +10,19 @@
 </div>
 
 <div class="guia">
+    {# RF-11: ubicación y horario del Departamento de Objetos Perdidos. El horario sale del .env (HORARIO_ATENCION). #}
+    <section class="panel guia-bloque guia-destacada">
+        <h3>{{ icono('ubicacion') }} Dónde y cuándo</h3>
+        <p>La verificación y la entrega son <strong>presenciales</strong>, con tu carné. Los objetos se guardan en:</p>
+        <ul class="lugares-guia">
+            {% for u in ubicaciones %}<li>{{ icono('ubicacion') }} {{ u }}</li>{% endfor %}
+        </ul>
+        <p class="texto-suave">Cada objeto del catálogo dice en cuál de estos lugares está.</p>
+        {% if horario %}
+            <p class="horario-guia">{{ icono('calendario') }} <strong>Horario de atención:</strong> {{ horario }}</p>
+        {% endif %}
+    </section>
+
     <section class="panel guia-bloque">
         <h3>{{ icono('lupa') }} Perdí algo</h3>
         <ol class="pasos">
@@ -40,9 +53,17 @@
     </section>
 
     <section class="panel guia-bloque">
+        <h3>{{ icono('mas') }} Encontré algo</h3>
+        <ol class="pasos">
+            <li><strong>Llévalo</strong> a uno de los lugares de arriba.</li>
+            <li><strong>Di dónde y cuándo lo encontraste.</strong> El encargado lo registra y le asigna un código.</li>
+            <li><strong>Da tu nombre y CIF.</strong> Queda registrado que lo entregaste tú.</li>
+        </ol>
+    </section>
+
+    <section class="panel guia-bloque">
         <h3>{{ icono('privado') }} ¿Por qué no veo dónde se encontró?</h3>
         <p>Para evitar que alguien se lleve lo que no es suyo. El encargado compara las señas con el registro privado.</p>
-        <p class="texto-suave">¿Encontraste algo? Entrégalo al encargado para que lo registre.</p>
     </section>
 </div>
 

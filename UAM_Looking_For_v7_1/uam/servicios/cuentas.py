@@ -4,7 +4,8 @@ import sqlite3
 from ..config import LARGO_MAXIMO, ROL_ADMIN, ROL_ESTUDIANTE, ROLES_GESTIONABLES
 from ..datos import usuarios
 from ..seguridad import hash_contrasena, iguales, necesita_rehash, verificar_contrasena
-from ..validacion import cif_valido, correo_valido, limpiar_cif, mismo_nombre, muy_largo, primer_error, texto
+from ..validacion import (cif_valido, correo_valido, limpiar_cif, mismo_nombre, muy_largo, primer_error, telefono_valido,
+                          texto)
 from .personas import es_cuenta
 
 MINIMO_CONTRASENA = 6
@@ -31,8 +32,10 @@ def sincronizar_admin(env):
     if not admin_configurado(env):
         return None
     cif = limpiar_cif(env['ADMIN_USUARIO'])
-    return usuarios.guardar_admin(env.get('ADMIN_NOMBRE') or 'Administrador', cif,
-                                  (env.get('ADMIN_CORREO') or f'{cif.lower()}@admin.local').lower())
+    admin_id = usuarios.guardar_admin(env.get('ADMIN_NOMBRE') or 'Administrador', cif,
+                                      (env.get('ADMIN_CORREO') or f'{cif.lower()}@admin.local').lower())
+    usuarios.quitar_admins_sobrantes(cif)   # v10.1: el único administrador es el del .env
+    return admin_id
 
 
 # ---------- Inicio de sesión ----------
@@ -109,7 +112,7 @@ def guardar_usuario(nombre, cif, correo, carrera, rol, contrasena, id=None):
         return False, 'El correo o el CIF ya pertenece a otra cuenta.'
 
 
-def registrar_estudiante(nombre, cif, correo, contrasena, confirmar):
+def registrar_estudiante(nombre, cif, correo, contrasena, confirmar, carrera=None):
     """Registro público: el estudiante crea su propia cuenta y siempre recibe el rol Estudiante.
 
     Si ya vino a ventanilla como estudiante (sin cuenta) y el nombre corresponde, la cuenta se crea sobre esa fila.
@@ -117,10 +120,12 @@ def registrar_estudiante(nombre, cif, correo, contrasena, confirmar):
     """
     if (contrasena or '') != (confirmar or ''):
         return False, 'Las contraseñas no coinciden.'
+    if len(texto(carrera)) < 3:
+        return False, 'Escribe tu carrera (forma parte de tu perfil de estudiante).'
     previa = usuarios.buscar_por_cif(limpiar_cif(cif))
     if previa and (es_cuenta(previa) or previa['rol'] != ROL_ESTUDIANTE or not mismo_nombre(nombre, previa['nombre'])):
         return False, MENSAJE_CIF_OCUPADO
-    return guardar_usuario(nombre, cif, correo, None, ROL_ESTUDIANTE, contrasena)
+    return guardar_usuario(nombre, cif, correo, carrera, ROL_ESTUDIANTE, contrasena)
 
 
 def cambiar_activo(id, activo):
@@ -133,3 +138,44 @@ def cambiar_activo(id, activo):
 
 def es_admin(usuario):
     return usuario is not None and usuario['rol'] == ROL_ADMIN
+
+
+# ---------- Mi perfil (RF-05) ----------
+
+def actualizar_perfil(usuario, correo, carrera, telefono):
+    """La persona corrige su correo, carrera y teléfono. El nombre, el CIF y el rol solo los cambia el administrador
+    (son su identidad). El administrador del .env no se edita aquí: sus datos salen de ese archivo."""
+    if usuario['rol'] == ROL_ADMIN:
+        return False, 'Los datos del administrador se cambian en el archivo .env del servidor.'
+    correo, carrera, telefono = texto(correo).lower(), texto(carrera), texto(telefono)
+    dueno = usuarios.buscar_por_correo(correo) if correo else None
+    error = primer_error([
+        (not correo_valido(correo), 'Escribe un correo válido.'),
+        (muy_largo(correo, 'correo'), 'El correo es demasiado largo (máximo 120 caracteres).'),
+        (usuario['rol'] == ROL_ESTUDIANTE and len(carrera) < 3, 'Escribe tu carrera.'),
+        (muy_largo(carrera, 'carrera'), 'La carrera es demasiado larga (máximo 100 caracteres).'),
+        (bool(telefono) and not telefono_valido(telefono), 'Escribe un número de teléfono válido (al menos 8 dígitos) o déjalo vacío.'),
+        (ocupado_por_otro(dueno, usuario['id']), 'Ese correo ya pertenece a otra cuenta.'),
+    ])
+    if error:
+        return False, error
+    usuarios.actualizar_perfil(usuario['id'], correo, carrera or None, telefono or None)
+    return True, 'Tus datos se guardaron.'
+
+
+def cambiar_contrasena(usuario, actual, nueva, confirmar):
+    if usuario['rol'] == ROL_ADMIN:
+        return False, 'La contraseña del administrador se cambia en el archivo .env del servidor.'
+    actual, nueva = actual or '', nueva or ''
+    error = primer_error([
+        (len(actual) > LARGO_MAXIMO['contrasena'] or not verificar_contrasena(actual, usuario['contrasena_hash']),
+         'La contraseña actual no es correcta.'),
+        (len(nueva) < MINIMO_CONTRASENA, f'La contraseña nueva debe tener al menos {MINIMO_CONTRASENA} caracteres.'),
+        (muy_largo(nueva, 'contrasena'), 'La contraseña es demasiado larga (máximo 128 caracteres).'),
+        (nueva != (confirmar or ''), 'Las contraseñas nuevas no coinciden.'),
+        (nueva == actual, 'La contraseña nueva debe ser distinta de la actual.'),
+    ])
+    if error:
+        return False, error
+    usuarios.cambiar_hash(usuario['id'], hash_contrasena(nueva))
+    return True, 'Tu contraseña se cambió.'

@@ -11,16 +11,16 @@
     </div>
     <form method="GET" class="fila-form buscar-codigo" role="search">
         {% if estado_actual %}<input type="hidden" name="estado" value="{{ estado_actual }}">{% endif %}
-        <input type="search" name="codigo" value="{{ codigo }}" maxlength="13" placeholder="Buscar por código (UAM-…)" aria-label="Buscar por código">
+        <input type="search" name="codigo" value="{{ request.args.get('codigo', '') }}" maxlength="100" placeholder="Código, nombre, teléfono u objeto" aria-label="Buscar reportes">
         <button type="submit" class="btn">{{ icono('lupa') }} Buscar</button>
     </form>
 </div>
 
 <nav class="pestanas" aria-label="Filtrar por estado">
-    <a href="{{ url_for('visitantes.panel', codigo=codigo or None) }}" class="pestana {{ 'activa' if not estado_actual }}">
+    <a href="{{ url_for('visitantes.panel', codigo=request.args.get('codigo') or None) }}" class="pestana {{ 'activa' if not estado_actual }}">
         Todos <span class="contador">{{ conteo.values()|sum }}</span></a>
     {% for e in estados_reporte %}
-        <a href="{{ url_for('visitantes.panel', estado=e, codigo=codigo or None) }}" class="pestana {{ 'activa' if estado_actual == e }}">
+        <a href="{{ url_for('visitantes.panel', estado=e, codigo=request.args.get('codigo') or None) }}" class="pestana {{ 'activa' if estado_actual == e }}">
             {{ e }} <span class="contador">{{ conteo.get(e, 0) }}</span></a>
     {% endfor %}
 </nav>
@@ -43,7 +43,7 @@
                 WhatsApp: <span class="badge whatsapp-{{ r.whatsapp_estado|lower|replace(' ', '-') }}">{{ r.whatsapp_estado }}</span></p>
         </a>
     {% else %}
-        <p class="panel vacio">No hay reportes {{ 'con ese código' if codigo else 'en esta sección' }}.</p>
+        <p class="panel vacio">No hay reportes {{ 'que coincidan con la búsqueda' if request.args.get('codigo') else 'en esta sección' }}.</p>
     {% endfor %}
 </div>
 {% endblock %}

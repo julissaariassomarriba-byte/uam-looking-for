@@ -38,12 +38,53 @@ OCULTO = f"""(o.estado IN ('Entregado', 'Devuelto') AND {FECHA_OCULTA} <= {AHORA
               AND NOT EXISTS (SELECT 1 FROM reclamaciones r JOIN entregas e ON e.id = r.entrega_id
                               WHERE e.objeto_id = o.id AND r.estado = 'Pendiente'))"""
 
+# ---------- Plazos de custodia (RF-16) ----------
+# Cuánto puede quedarse un objeto sin reclamar en la oficina (Activo o En resguardo) y en bodega. Tampoco se guarda:
+# la fecha de vencimiento se calcula desde el hallazgo (oficina) o desde que entró a bodega, según el historial.
+# Los días los fija crear_app() con PLAZO_OFICINA_DIAS y PLAZO_BODEGA_DIAS del .env.
+CUSTODIA_DEFECTO = {'oficina': 30, 'bodega': 60}   # provisionales: los define la oficina en el .env
+DIAS_AVISO = 3                                     # «por vencer»: faltan 3 días o menos
+_custodia = dict(CUSTODIA_DEFECTO)
+
+
+def configurar_custodia(oficina, bodega):
+    for clave, valor in (('oficina', oficina), ('bodega', bodega)):
+        try:
+            _custodia[clave] = max(1, min(3650, int(valor)))
+        except (TypeError, ValueError):
+            _custodia[clave] = CUSTODIA_DEFECTO[clave]
+
+
+def plazos_custodia():
+    return dict(_custodia)
+
+
+EN_CUSTODIA = "o.estado IN ('Activo', 'En resguardo', 'En bodega')"
+INICIO_CUSTODIA = """(CASE WHEN o.estado = 'En bodega'
+    THEN COALESCE((SELECT date(max(h.fecha_hora)) FROM historial h WHERE h.objeto_id = o.id AND h.estado_nuevo = 'En bodega'), o.fecha)
+    ELSE o.fecha END)"""
+FECHA_VENCE = (f"(CASE WHEN {EN_CUSTODIA} THEN date({INICIO_CUSTODIA}, '+' || "
+               f"(CASE WHEN o.estado = 'En bodega' THEN :dias_bodega ELSE :dias_oficina END) || ' days') END)")
+DIAS_RESTANTES = f"CAST(julianday({FECHA_VENCE}) - julianday(date({AHORA})) AS INTEGER)"
+
+
+def parametros(**extra):
+    """Los días de los plazos que usan todas las consultas de objetos, más los parámetros propios de cada una."""
+    return {'dias': dias_plazo(), 'dias_oficina': _custodia['oficina'], 'dias_bodega': _custodia['bodega'], **extra}
+
+
+def patron(texto):
+    """Texto para LIKE sin comodines: % y _ se buscan como letras."""
+    return '%' + texto.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+
+
 SQL_OBJETOS = 'SELECT {} FROM objetos o LEFT JOIN usuarios p ON p.id = o.reportado_por'
 COLUMNAS_PERSONAL = ('o.id, o.titulo, o.descripcion, o.descripcion_publica, o.categoria, o.lugar_encontrado, o.ubicacion, '
                      'o.fecha, o.hora, o.estado, o.registrado_por, o.reportado_por, o.foto_publica, o.foto IS NOT NULL AS tiene_foto, '
                      'p.nombre AS reportado_nombre, p.rol AS reportado_tipo, p.cif AS reportado_cif, '
                      'p.telefono AS reportado_telefono, p.correo AS reportado_correo, '
-                     f'{OCULTO} AS oculto, {FECHA_OCULTA} AS fecha_oculta, {FECHA_OCULTA} <= {AHORA} AS plazo_cumplido')
+                     f'{OCULTO} AS oculto, {FECHA_OCULTA} AS fecha_oculta, {FECHA_OCULTA} <= {AHORA} AS plazo_cumplido, '
+                     f'{FECHA_VENCE} AS fecha_vence, {DIAS_RESTANTES} AS dias_restantes')
 # Lo único que ve un estudiante: sin lugar del hallazgo, fecha exacta, hora, descripción interna ni quién lo trajo.
 COLUMNAS_PUBLICAS = ('o.id, o.titulo, o.categoria, o.estado, o.descripcion_publica, substr(o.fecha, 1, 7) AS periodo, '
                      f'o.ubicacion, o.foto IS NOT NULL AND o.foto_publica = 1 AS tiene_foto, {OCULTO} AS oculto')
@@ -53,19 +94,60 @@ COLUMNAS_NUEVO = ('titulo', 'descripcion', 'descripcion_publica', 'categoria', '
                   'estado', 'registrado_por', 'reportado_por', 'foto', 'foto_publica')
 
 
-def listar(categoria=None, ubicacion=None, publicos=False, ocultos=False):
+# Dónde busca la palabra clave. Un estudiante solo en lo público; el personal también en lo interno, en quién lo
+# trajo y en quién lo retiró (nombre, CIF o carrera), y por código (#12 o 12).
+BUSQUEDA_PUBLICA = "(o.titulo LIKE :q ESCAPE '\\' OR o.descripcion_publica LIKE :q ESCAPE '\\' OR o.categoria LIKE :q ESCAPE '\\')"
+BUSQUEDA_PERSONAL = ("(o.id = :q_id OR o.titulo LIKE :q ESCAPE '\\' OR o.descripcion_publica LIKE :q ESCAPE '\\' "
+                     "OR o.descripcion LIKE :q ESCAPE '\\' OR o.categoria LIKE :q ESCAPE '\\' OR o.lugar_encontrado LIKE :q ESCAPE '\\' "
+                     "OR p.nombre LIKE :q ESCAPE '\\' OR p.cif LIKE :q ESCAPE '\\' OR p.carrera LIKE :q ESCAPE '\\' "
+                     "OR EXISTS (SELECT 1 FROM entregas e JOIN usuarios r ON r.id = e.retirado_por WHERE e.objeto_id = o.id "
+                     "AND (r.nombre LIKE :q ESCAPE '\\' OR r.cif LIKE :q ESCAPE '\\' OR r.carrera LIKE :q ESCAPE '\\')))")
+
+
+def listar(categoria=None, ubicacion=None, publicos=False, ocultos=False, q=None, mes=None, desde=None, hasta=None,
+           estado=None, por_vencer=False):
     """Catálogo: por defecto solo los objetos visibles; ocultos=True lista los que ya cumplieron su plazo
-    y ocultos=None lista todos (historial y PDF)."""
+    y ocultos=None lista todos (historial y PDF). por_vencer=True: bajo custodia con 3 días o menos (o vencidos).
+    q busca una palabra (o un código, para el personal); mes (AAAA-MM), desde y hasta filtran por fecha del hallazgo."""
+    q = (q or '').strip()
+    codigo = q.lstrip('#')
+    filtros = [
+        '(:categoria IS NULL OR o.categoria = :categoria)', '(:ubicacion IS NULL OR o.ubicacion = :ubicacion)',
+        f'(:ocultos IS NULL OR {OCULTO} = :ocultos)', '(:estado IS NULL OR o.estado = :estado)',
+        '(:mes IS NULL OR substr(o.fecha, 1, 7) = :mes)', '(:desde IS NULL OR o.fecha >= :desde)', '(:hasta IS NULL OR o.fecha <= :hasta)',
+    ]
+    if q:
+        filtros.append(BUSQUEDA_PUBLICA if publicos else BUSQUEDA_PERSONAL)
+    if por_vencer and not publicos:
+        filtros.append(f'{DIAS_RESTANTES} <= {DIAS_AVISO}')
+    orden = f'{DIAS_RESTANTES}, o.id' if por_vencer and not publicos else 'o.id DESC'
     return consultar(SQL_OBJETOS.format(COLUMNAS_PUBLICAS if publicos else COLUMNAS_PERSONAL) +
-                     f' WHERE (:categoria IS NULL OR o.categoria = :categoria) AND (:ubicacion IS NULL OR o.ubicacion = :ubicacion)'
-                     f' AND (:ocultos IS NULL OR {OCULTO} = :ocultos) ORDER BY o.id DESC',
-                     {'categoria': categoria, 'ubicacion': ubicacion, 'dias': dias_plazo(),
-                      'ocultos': None if ocultos is None else int(ocultos)})
+                     ' WHERE ' + ' AND '.join(filtros) + f' ORDER BY {orden}',
+                     parametros(categoria=categoria, ubicacion=ubicacion, estado=estado, mes=mes, desde=desde, hasta=hasta,
+                                ocultos=None if ocultos is None else int(ocultos), q=patron(q) if q else None,
+                                q_id=int(codigo) if codigo.isdigit() else None))
+
+
+def meses_con_objetos():
+    """Meses (AAAA-MM) con objetos visibles en el catálogo, del más reciente al más antiguo: el filtro del estudiante."""
+    return [f[0] for f in consultar(f'SELECT DISTINCT substr(o.fecha, 1, 7) FROM objetos o WHERE NOT {OCULTO} ORDER BY 1 DESC',
+                                    parametros())]
+
+
+def plazos_por_vencer(limite=6):
+    """Objetos bajo custodia que vencen en 3 días o menos (o ya vencieron), primero los más urgentes."""
+    return listar(por_vencer=True)[:limite]
+
+
+def contar_plazos():
+    fila = consultar(f"""SELECT COALESCE(SUM({DIAS_RESTANTES} < 0), 0), COALESCE(SUM({DIAS_RESTANTES} BETWEEN 0 AND {DIAS_AVISO}), 0)
+                         FROM objetos o WHERE {EN_CUSTODIA}""", parametros(), True)
+    return {'vencidos': fila[0], 'por_vencer': fila[1]}
 
 
 def buscar(id, publico=False, con=None):
     return consultar(SQL_OBJETOS.format(COLUMNAS_PUBLICAS if publico else COLUMNAS_PERSONAL) + ' WHERE o.id = :id',
-                     {'id': id, 'dias': dias_plazo()}, True, con)
+                     parametros(id=id), True, con)
 
 
 def contar_por(columna, visibles=False):

@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% from 'parciales/macros.html' import icono %}
+
+{% block titulo %}Mi perfil | UAM Looking For{% endblock %}
+
+{% block contenido %}
+{% set u = usuario_actual %}
+<div class="titulo-pagina">
+    <div>
+        <h2>Mi perfil</h2>
+        <p class="texto-suave subtitulo-pagina">Tus datos en UAM Looking For. El nombre y el CIF solo los corrige la oficina.</p>
+    </div>
+</div>
+
+<div class="perfil">
+    <section class="panel perfil-tarjeta">
+        <div class="perfil-cabecera">
+            <span class="avatar-cuenta avatar-{{ u.rol|lower }}" aria-hidden="true">{{ u.nombre.split()[0][0] }}{{ u.nombre.split()[1][0] if u.nombre.split()|length > 1 }}</span>
+            <div>
+                <h3>{{ u.nombre }}</h3>
+                <span class="rol-chip rol-{{ u.rol|lower }}">{{ u.rol }}</span>
+            </div>
+        </div>
+        <dl class="mini-datos perfil-datos">
+            <dt>CIF</dt><dd>{{ u.cif }}</dd>
+            <dt>Carrera</dt><dd>{{ u.carrera or '—' }}</dd>
+            <dt>Correo</dt><dd>{{ u.correo or '—' }}</dd>
+            <dt>Teléfono</dt><dd>{{ u.telefono or '—' }}</dd>
+        </dl>
+        {% if es_admin %}
+            <p class="texto-suave ayuda-form">{{ icono('info') }} Los datos y la contraseña del administrador se cambian en el archivo .env del servidor.</p>
+        {% endif %}
+    </section>
+
+    {% if not es_admin %}
+    <section class="panel perfil-formulario">
+        <h3>{{ icono('editar') }} Corregir mis datos</h3>
+        <form method="POST" action="{{ url_for('acceso.perfil') }}" class="form-compacto">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="accion" value="datos">
+            <label for="correo">Correo</label>
+            <input type="email" id="correo" name="correo" maxlength="{{ largo.correo }}" value="{{ u.correo or '' }}" required autocomplete="email">
+            <label for="carrera">Carrera{% if not es_estudiante %} o departamento <span class="texto-suave">(opcional)</span>{% endif %}</label>
+            <input type="text" id="carrera" name="carrera" maxlength="{{ largo.carrera }}" value="{{ u.carrera or '' }}" {{ 'required minlength=3' if es_estudiante }}>
+            <label for="telefono">Teléfono <span class="texto-suave">(opcional)</span></label>
+            <input type="tel" id="telefono" name="telefono" maxlength="{{ largo.telefono }}" value="{{ u.telefono or '' }}" placeholder="Ej. 8888 8888" autocomplete="tel">
+            <button type="submit" class="btn">Guardar cambios</button>
+        </form>
+    </section>
+
+    <section class="panel perfil-formulario">
+        <h3>{{ icono('candado') }} Cambiar contraseña</h3>
+        <form method="POST" action="{{ url_for('acceso.perfil') }}" class="form-compacto">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="accion" value="contrasena">
+            <label for="actual">Contraseña actual</label>
+            <input type="password" id="actual" name="actual" maxlength="{{ largo.contrasena }}" required autocomplete="current-password">
+            <label for="nueva">Contraseña nueva <span class="texto-suave">(mín. 6 caracteres)</span></label>
+            <input type="password" id="nueva" name="nueva" maxlength="{{ largo.contrasena }}" required minlength="6" autocomplete="new-password">
+            <label for="confirmar">Repite la contraseña nueva</label>
+            <input type="password" id="confirmar" name="confirmar" maxlength="{{ largo.contrasena }}" required minlength="6" autocomplete="new-password">
+            <button type="submit" class="btn">Cambiar contraseña</button>
+        </form>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

@@ -6,11 +6,11 @@
     <aside class="panel barra-lateral">
         <h3>Categorías</h3>
         <div class="lista-lateral">
-            <a href="{{ url_for('objetos.inicio', ubicacion=ubicacion_actual, ocultos=1 if ver_ocultos else None) }}" class="item-lateral {{ 'activo' if not categoria_actual }}">
+            <a href="{{ url_filtro(categoria=None) }}" class="item-lateral {{ 'activo' if not categoria_actual }}">
                 {{ icono('cuadricula') }} <span>Todas</span> <span class="contador">{{ por_categoria.values()|sum }}</span>
             </a>
             {% for nombre, ic in categorias.items() %}
-                <a href="{{ url_for('objetos.inicio', categoria=nombre, ubicacion=ubicacion_actual, ocultos=1 if ver_ocultos else None) }}" class="item-lateral {{ 'activo' if categoria_actual == nombre }}">
+                <a href="{{ url_filtro(categoria=nombre) }}" class="item-lateral {{ 'activo' if categoria_actual == nombre }}">
                     {{ icono(ic) }} <span>{{ nombre }}</span> <span class="contador">{{ por_categoria.get(nombre, 0) }}</span>
                 </a>
             {% endfor %}
@@ -19,7 +19,7 @@
         <h3>Dónde se guarda</h3>
         <div class="lista-lateral">
             {% for u in ubicaciones %}
-                <a href="{{ url_for('objetos.inicio', ubicacion=u, categoria=categoria_actual, ocultos=1 if ver_ocultos else None) }}"
+                <a href="{{ url_filtro(ubicacion=u) }}"
                    class="item-lateral {{ 'activo' if ubicacion_actual == u }}">
                     {{ icono('ubicacion') }} <span>{{ u }}</span> <span class="contador">{{ por_ubicacion.get(u, 0) }}</span>
                 </a>
@@ -39,20 +39,54 @@
     <section>
         <div class="titulo-pagina">
             <div>
-                <h2>{{ 'Objetos ocultos' if ver_ocultos else (categoria_actual or 'Catálogo de objetos') }}</h2>
+                <h2>{{ 'Objetos ocultos' if ver_ocultos else ('Plazos por vencer' if ver_vencer else (categoria_actual or 'Catálogo de objetos')) }}</h2>
                 <p class="texto-suave subtitulo-pagina">{{ objetos|length }} {{ 'objeto' if objetos|length == 1 else 'objetos' }}
                     {%- if ubicacion_actual %} en {{ ubicacion_actual }} ·
-                    <a href="{{ url_for('objetos.inicio', categoria=categoria_actual, ocultos=1 if ver_ocultos else None) }}">ver todas las ubicaciones</a>{% endif %}</p>
+                    <a href="{{ url_filtro(ubicacion=None) }}">ver todas las ubicaciones</a>{% endif %}</p>
             </div>
             {% if es_encargado %}
-                <nav class="filtro-rol" aria-label="Visibles u ocultos">
-                    <a href="{{ url_for('objetos.inicio') }}" class="{{ 'activo' if not ver_ocultos }}">En el catálogo</a>
+                <nav class="filtro-rol" aria-label="Qué objetos ver">
+                    <a href="{{ url_for('objetos.inicio') }}" class="{{ 'activo' if not ver_ocultos and not ver_vencer }}">En el catálogo</a>
+                    <a href="{{ url_for('objetos.inicio', vencer=1) }}" class="{{ 'activo' if ver_vencer }}{{ ' con-alerta' if plazos.vencidos }}">Por vencer
+                        <span>{{ plazos.vencidos + plazos.por_vencer }}</span></a>
                     <a href="{{ url_for('objetos.inicio', ocultos=1) }}" class="{{ 'activo' if ver_ocultos }}">Ocultos <span>{{ objetos_ocultos }}</span></a>
                 </nav>
             {% endif %}
         </div>
 
-        {% if es_encargado and ver_ocultos %}
+        {# Búsqueda (RF-10 y RF-19). El estudiante busca en lo público y filtra por mes; el personal también busca por
+           código, CIF o carrera de quien trajo o retiró el objeto, y filtra por fechas y estado. #}
+        <form method="GET" action="{{ url_for('objetos.inicio') }}" class="panel buscador-catalogo" role="search">
+            {% for clave in ('categoria', 'ubicacion', 'ocultos', 'vencer') %}
+                {% if request.args.get(clave) %}<input type="hidden" name="{{ clave }}" value="{{ request.args.get(clave) }}">{% endif %}
+            {% endfor %}
+            <label class="buscador-texto">{{ icono('lupa') }}
+                <input type="search" name="q" maxlength="100" value="{{ filtros.q or '' }}"
+                       placeholder="{{ 'Palabra, código (#12), CIF o carrera' if es_encargado else 'Busca por palabra: mochila, llaves, azul…' }}"
+                       aria-label="Buscar objetos"></label>
+            {% if es_encargado %}
+                <label class="buscador-campo"><span>Desde</span><input type="date" name="desde" value="{{ filtros.desde or '' }}"></label>
+                <label class="buscador-campo"><span>Hasta</span><input type="date" name="hasta" value="{{ filtros.hasta or '' }}"></label>
+                <label class="buscador-campo"><span>Estado</span>
+                    <select name="estado">
+                        <option value="">Todos</option>
+                        {% for e in estados %}<option value="{{ e }}" {{ 'selected' if filtros.estado == e }}>{{ e }}</option>{% endfor %}
+                    </select></label>
+            {% else %}
+                <label class="buscador-campo"><span>Mes</span>
+                    <select name="mes">
+                        <option value="">Todos</option>
+                        {% for m in meses %}<option value="{{ m }}" {{ 'selected' if filtros.mes == m }}>{{ m|mes }}</option>{% endfor %}
+                    </select></label>
+            {% endif %}
+            <button type="submit" class="btn">Buscar</button>
+            {% if buscando %}<a href="{{ url_filtro(q=None, mes=None, desde=None, hasta=None, estado=None) }}" class="btn btn-claro">Limpiar</a>{% endif %}
+        </form>
+
+        {% if es_encargado and ver_vencer %}
+            <p class="aviso-plazo">{{ icono('info') }} Objetos bajo custodia a los que les quedan {{ dias_aviso }} días o menos, o que ya vencieron.
+                Plazo en oficina: {{ custodia.oficina }} días desde el hallazgo · en bodega: {{ custodia.bodega }} días desde que entró.</p>
+        {% elif es_encargado and ver_ocultos %}
             <p class="aviso-plazo">{{ icono('info') }} Estos objetos se entregaron o devolvieron hace {{ dias_plazo }} días o más: ya no salen en el
                 catálogo para los estudiantes. Siguen guardados con todo su registro.</p>
         {% elif es_encargado and objetos_ocultos %}
@@ -81,6 +115,14 @@
                         {% else %}
                             <p>{{ icono('calendario') }} Reportado en {{ objeto.periodo|mes }}</p>
                         {% endif %}
+                        {% if es_encargado and objeto.dias_restantes is not none %}
+                            {% set d = objeto.dias_restantes %}
+                            <p class="plazo-custodia {{ 'vencido' if d < 0 else ('por-vencer' if d <= dias_aviso else '') }}">{{ icono('historial') }}
+                                {%- if d < 0 %} Plazo vencido hace {{ -d }} {{ 'día' if d == -1 else 'días' }}
+                                {%- elif d == 0 %} El plazo vence hoy
+                                {%- elif d <= dias_aviso %} Vence en {{ d }} {{ 'día' if d == 1 else 'días' }}
+                                {%- else %} En plazo hasta el {{ objeto.fecha_vence }}{% endif %}</p>
+                        {% endif %}
                         {% if es_encargado and objeto.estado in ('Entregado', 'Devuelto') and not objeto.oculto and objeto.fecha_oculta %}
                             <p class="texto-suave">{{ icono('historial') }} {{ 'Con reclamación pendiente: no se oculta' if objeto.plazo_cumplido else 'Se oculta el ' ~ objeto.fecha_oculta[:10] }}</p>
                         {% endif %}
@@ -88,7 +130,8 @@
                     </div>
                 </a>
             {% else %}
-                <p class="panel vacio">{{ 'No hay objetos ocultos: nada que limpiar.' if ver_ocultos else 'No hay objetos registrados con estos filtros.' }}</p>
+                <p class="panel vacio">{{ 'Ningún objeto coincide con la búsqueda.' if buscando else ('No hay objetos ocultos.' if ver_ocultos else
+                    ('Ningún plazo vence en los próximos ' ~ dias_aviso ~ ' días.' if ver_vencer else 'No hay objetos registrados con estos filtros.')) }}</p>
             {% endfor %}
         </div>
     </section>

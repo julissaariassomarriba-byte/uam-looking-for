@@ -17,6 +17,15 @@
     {% if objeto.plazo_cumplido %}Este objeto ya cumplió su plazo en el catálogo, pero sigue visible porque tiene una reclamación pendiente.
     {% else %}Este objeto dejará de verse en el catálogo el {{ objeto.fecha_oculta[:10] }}
     ({{ dias_plazo }} días después de salir de custodia){{ ', salvo que tenga una reclamación pendiente' if objeto.estado == 'Entregado' }}.{% endif %}</p>
+{% elif es_encargado and objeto.dias_restantes is not none %}
+{% set d = objeto.dias_restantes %}
+<p class="aviso-plazo plazo-custodia-aviso {{ 'vencido' if d < 0 else ('por-vencer' if d <= dias_aviso else '') }}">{{ icono('historial') }}
+    <span><strong>{% if d < 0 %}El plazo de custodia venció el {{ objeto.fecha_vence }}.{% elif d == 0 %}El plazo de custodia vence hoy.
+        {%- else %}Plazo de custodia hasta el {{ objeto.fecha_vence }} ({{ d }} {{ 'día' if d == 1 else 'días' }}).{% endif %}</strong>
+        {{ 'En bodega' if objeto.estado == 'En bodega' else 'En oficina' }} el plazo es de
+        {{ custodia.bodega if objeto.estado == 'En bodega' else custodia.oficina }} días
+        {{- ' desde que entró a bodega' if objeto.estado == 'En bodega' else ' desde el hallazgo' }}.
+        {%- if d <= dias_aviso %} Decide con la oficina si pasa a bodega, se dona o se descarta.{% endif %}</span></p>
 {% endif %}
 
 <div class="detalle">
@@ -82,6 +91,16 @@
                 <dt>Señas que dio</dt><dd>{{ entrega.senas }}</dd>
                 <dt>Fecha</dt><dd>{{ entrega.fecha_entrega }} · por {{ entrega.entregado_por_nombre }}</dd>
             </dl>
+            {# Comprobante de entrega (RF-12 y RF-14): para imprimir y firmar, o para enviar por correo. #}
+            <div class="comprobante-acciones">
+                <a href="{{ url_for('objetos.comprobante', id=objeto.id) }}" class="btn btn-claro btn-mini" target="_blank" rel="noopener">{{ icono('guia') }} Comprobante para imprimir</a>
+                <form method="POST" action="{{ url_for('objetos.enviar_comprobante', id=objeto.id) }}" class="form-correo">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="email" name="correo" maxlength="{{ largo.correo }}" value="{{ entrega.correo or '' }}"
+                           placeholder="Correo de quien lo retiró" aria-label="Correo para el comprobante" required>
+                    <button type="submit" class="btn btn-mini">{{ icono('bandeja') }} Enviar por correo</button>
+                </form>
+            </div>
         {% endif %}
         {% if objeto.estado == 'Entregado' %}
             <p class="texto-suave ayuda-form">Si alguien demuestra que el objeto era suyo, acepta su reclamación para recuperarlo.</p>
