@@ -1,14 +1,9 @@
-"""Revisa las fotos que llegan al servidor, sin librerías.
-
-El navegador ya las reduce y comprime (ver templates/foto_script.html). Aquí se comprueba de nuevo, leyendo
-la cabecera del archivo, que sea de verdad WebP o JPEG, que no pase del peso ni de las dimensiones máximas
-y que no esté cortada. Así nadie puede guardar una foto enorme aunque se salte el formulario.
-"""
+# Revisa las fotos subidas (formato, peso y tamaño).
 PESO_MAXIMO = 300 * 1024   # 300 KB (igual que el CHECK de objetos.foto)
 LADO_MAXIMO = 1280         # píxeles del lado más largo
 
 
-# Ancho y alto de un JPEG: se recorren sus bloques hasta el que describe la imagen (marcador SOF).
+# Ancho y alto de un JPEG.
 def medir_jpeg(d):
     if d[-2:] != b'\xff\xd9':          # un JPEG completo termina con FFD9
         return None
@@ -26,7 +21,7 @@ def medir_jpeg(d):
     return None
 
 
-# Ancho y alto de un WebP según su tipo de bloque: con pérdida (VP8), sin pérdida (VP8L) o extendido (VP8X).
+# Ancho y alto de un WebP.
 def medir_webp(d):
     if int.from_bytes(d[4:8], 'little') + 8 != len(d):   # el tamaño declarado no coincide: archivo cortado
         return None
@@ -41,7 +36,7 @@ def medir_webp(d):
     return None
 
 
-# Formato real según los primeros bytes (no según la extensión del archivo).
+# Formato de la imagen por sus primeros bytes.
 def formato(datos):
     if datos[:3] == b'\xff\xd8\xff':
         return 'image/jpeg'
@@ -50,7 +45,7 @@ def formato(datos):
     return None
 
 
-# Devuelve (True, datos), (True, None) si no se subió foto, o (False, mensaje).
+# Revisa la foto y devuelve sus datos o el error.
 def revisar(archivo):
     if not archivo or not archivo.filename:
         return True, None

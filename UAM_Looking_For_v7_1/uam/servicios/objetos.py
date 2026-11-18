@@ -1,4 +1,4 @@
-"""Recepción de objetos y cambios mientras están bajo custodia (estado, ubicación, foto, descripción pública)."""
+# Reglas de los objetos: recibir, mover, foto y estado.
 from ..config import CATEGORIAS, ESTADOS_MANUALES, UBICACIONES
 from ..datos import objetos
 from ..datos.conexion import hoy
@@ -7,6 +7,7 @@ from ..validacion import fecha_valida, hora_valida, mensaje_largo, muy_largo, pr
 from . import en_transaccion, personas
 
 
+# Revisa los datos de un objeto nuevo.
 def revisar_objeto(d):
     return primer_error([
         (not d['titulo'], 'Escribe el nombre del objeto.'),
@@ -25,9 +26,8 @@ def revisar_objeto(d):
     ])
 
 
+# Registra un objeto encontrado con su foto.
 def registrar_objeto(datos, archivo, usuario_id):
-    """Recepción: quién lo trae, el objeto, su foto y dónde queda guardado, en una sola transacción.
-    El «Registro» del historial lo escribe la base. Devuelve (True, id del objeto) o (False, mensaje)."""
     d = {campo: texto(datos.get(campo)) for campo in ('titulo', 'descripcion', 'lugar_encontrado', 'fecha')}
     d.update(descripcion_publica=texto(datos.get('descripcion_publica')) or None, categoria=datos.get('categoria'),
              ubicacion=datos.get('ubicacion'), estado=datos.get('estado') or 'Activo', hora=texto(datos.get('hora'))[:5] or None)
@@ -39,6 +39,7 @@ def registrar_objeto(datos, archivo, usuario_id):
         return False, foto
     sin_persona = datos.get('sin_persona') == '1'
 
+    # Guarda la persona, el objeto y la foto.
     def guardar(con):
         reportado = None
         if not sin_persona:
@@ -53,7 +54,9 @@ def registrar_objeto(datos, archivo, usuario_id):
     return en_transaccion(guardar)
 
 
+# Cambia la ubicación de un objeto.
 def cambiar_ubicacion(id, ubicacion, usuario_id):
+    # Guarda la ubicación y la anota.
     def guardar(con):
         objeto = objetos.buscar(id, con=con)
         if not objeto:
@@ -68,12 +71,13 @@ def cambiar_ubicacion(id, ubicacion, usuario_id):
     return en_transaccion(guardar)
 
 
+# Sube o cambia la foto y su visibilidad.
 def actualizar_foto(id, archivo, publica, usuario_id):
-    """Sube o reemplaza la foto (la nueva ocupa el lugar de la anterior) y decide si la ven los estudiantes."""
     ok, foto = imagenes.revisar(archivo)
     if not ok:
         return False, foto
 
+    # Guarda la foto y la anota.
     def guardar(con):
         objeto = objetos.buscar(id, con=con)
         if not objeto:
@@ -90,9 +94,9 @@ def actualizar_foto(id, archivo, publica, usuario_id):
     return en_transaccion(guardar)
 
 
+# Cambia el estado mientras el objeto está bajo custodia.
 def cambiar_estado_manual(id, nuevo_estado, usuario_id):
-    """Cambio hecho a mano, solo mientras el objeto está bajo custodia. Después de la entrega, el estado lo pone la
-    base según los hechos (entrega, reclamación, devolución)."""
+    # Guarda el estado y lo anota.
     def guardar(con):
         objeto = objetos.buscar(id, con=con)
         if not objeto:
@@ -109,11 +113,13 @@ def cambiar_estado_manual(id, nuevo_estado, usuario_id):
     return en_transaccion(guardar)
 
 
+# Cambia la descripción pública.
 def actualizar_descripcion_publica(id, nueva, usuario_id):
     nueva = texto(nueva) or None
     if muy_largo(nueva, 'descripcion_publica'):
         return False, mensaje_largo('descripcion_publica', 'El texto público')
 
+    # Guarda la descripción y la anota.
     def guardar(con):
         objeto = objetos.buscar(id, con=con)
         if not objeto:

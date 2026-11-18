@@ -154,3 +154,18 @@ administrador que entra es el del `.env`), pero ocupaba un lugar en la lista.
 | `tests/probar_app.py` | 7 pruebas nuevas: el caso sin movimientos (se borra) y con movimientos (se desactiva) |
 
 **Pruebas:** `tests/probar_app.py` **310/310**; `base_de_datos/probar_bd.py` **135/135**; `schema.sql` idéntico.
+
+---
+
+# v10.2 · Comentarios en el código
+
+Solo cambian los comentarios; el funcionamiento es idéntico al de la v10.1.
+
+- Cada función y clase de `app.py` y `uam/` tiene encima **un comentario corto con `#`** que dice qué hace
+  (por ejemplo, `# Registra la entrega de un objeto.`).
+- Las explicaciones largas entre comillas triples (`"""..."""`) se cambiaron por esos comentarios de una línea.
+- Los comentarios largos de varias líneas se resumieron en una.
+- `schema.sql`, las plantillas, el CSS y las pruebas no cambian.
+
+**Comprobación:** el código sin comentarios es idéntico al de la v10.1 (comparado con el árbol de sintaxis de
+Python). `tests/probar_app.py` **310/310**; `base_de_datos/probar_bd.py` **135/135**.

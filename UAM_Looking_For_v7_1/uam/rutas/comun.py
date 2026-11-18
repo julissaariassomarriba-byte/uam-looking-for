@@ -1,4 +1,4 @@
-"""Ayudas que comparten todas las rutas: usuario conectado, permisos por rol, avisos y filtros de la URL."""
+# Funciones que comparten todas las rutas.
 import functools
 
 from flask import current_app, flash, g, redirect, request, url_for
@@ -6,40 +6,44 @@ from flask import current_app, flash, g, redirect, request, url_for
 from ..config import ROL_ADMIN, ROL_ESTUDIANTE, ROLES_PERSONAL, leer_env
 
 
+# Valores actuales del .env.
 def entorno():
-    """Valores del .env (se leen en cada uso: así un cambio en el .env vale tras recargar la app)."""
     return leer_env(current_app.config['RUTA_ENV'])
 
 
+# Dice si el usuario tiene alguno de esos roles.
 def tiene_rol(*roles):
     return bool(g.get('usuario')) and g.usuario['rol'] in roles
 
 
+# Dice si el usuario es personal (encargado o admin).
 def es_personal():
     return tiene_rol(*ROLES_PERSONAL)
 
 
+# Muestra el mensaje de un servicio en verde o rojo.
 def avisar(ok, mensaje):
-    """Muestra el mensaje de un servicio (verde si salió bien, rojo si no) y devuelve si salió bien."""
     flash(mensaje, 'exito' if ok else 'error')
     return ok
 
 
+# Valor de un filtro de la URL, solo si está permitido.
 def opcion(nombre, permitidos, defecto=None):
-    """Filtro de la URL (?categoria=, ?estado=…): solo vale si es uno de los permitidos; si no, None (sin filtro)."""
     valor = request.args.get(nombre, defecto)
     return valor if valor in permitidos else None
 
 
+# Evita que el navegador guarde páginas privadas.
 def sin_cache(respuesta):
-    """Para páginas con datos privados: que el navegador no las guarde."""
     respuesta.headers['Cache-Control'] = 'no-store'
     return respuesta
 
 
+# Decorador: exige sesión y, si se indica, un rol.
 def requiere(*roles, mensaje='', acceso='acceso.login'):
-    """Decorador: exige sesión iniciada y, si se indican, alguno de los roles."""
+    # Envuelve la vista.
     def decorador(vista):
+        # Revisa la sesión y el rol antes de abrir la página.
         @functools.wraps(vista)   # conserva el nombre de la función: Flask lo usa como nombre de la ruta
         def envoltura(*args, **kwargs):
             if not g.usuario:

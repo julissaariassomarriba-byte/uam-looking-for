@@ -1,8 +1,4 @@
-"""Reportes de visitantes: alguien sin cuenta reporta un objeto que perdió y sigue su estado con un código.
-
-El token del enlace privado solo lo recibe el visitante: en la base queda su hash. La consulta por código exige
-también el teléfono, así el código solo (aunque se adivinara) no muestra nada.
-"""
+# Reglas de los reportes de visitantes.
 import hmac
 import re
 import secrets
@@ -25,16 +21,18 @@ ETIQUETAS = {'nombre': 'tu nombre', 'telefono': 'teléfono', 'correo': 'correo',
 INTENTOS_CODIGO = 5
 
 
+# Genera un código UAM-XXXX-XXXX.
 def nuevo_codigo():
     letras = ''.join(secrets.choice(ALFABETO_CODIGO) for _ in range(8))
     return f'UAM-{letras[:4]}-{letras[4:]}'
 
 
+# Deja solo letras, números y guiones en un código.
 def limpiar_codigo(codigo, maximo=13):
-    """Solo letras, números y guiones (así no quedan comodines de LIKE)."""
     return re.sub(r'[^A-Z0-9-]', '', texto(codigo).upper())[:maximo]
 
 
+# Revisa los datos de un reporte.
 def revisar_reporte(d):
     revisiones = [
         (len(d['nombre']) < 3, 'Escribe tu nombre completo.'),
@@ -52,8 +50,8 @@ def revisar_reporte(d):
     return primer_error(revisiones)
 
 
+# Guarda el reporte con su foto.
 def registrar_reporte(datos, archivo):
-    """Guarda el reporte con su foto obligatoria. Devuelve (True, {id, codigo, token}) o (False, mensaje)."""
     d = {campo: texto(datos.get(campo)) for campo in LARGOS}
     d.update(correo=d['correo'].lower() or None, categoria=datos.get('categoria'), fecha_perdida=texto(datos.get('fecha_perdida')))
     error = revisar_reporte(d)
@@ -77,8 +75,8 @@ def registrar_reporte(datos, archivo):
     return False, 'No se pudo generar un código para el reporte. Inténtalo de nuevo.'
 
 
+# Avisa por WhatsApp y guarda el resultado.
 def notificar(id, enlace, env):
-    """Avisa al encargado por WhatsApp y guarda el resultado REAL. Nunca hace fallar el reporte: ya está guardado."""
     reporte = visitantes.buscar(id)
     try:
         estado, detalle = notificaciones.enviar(env, reporte, enlace)
@@ -88,6 +86,7 @@ def notificar(id, enlace, env):
     return estado, detalle
 
 
+# Vuelve a intentar el aviso por WhatsApp.
 def reintentar_whatsapp(id, enlace, env):
     reporte = visitantes.buscar(id)
     if not reporte:
@@ -100,22 +99,23 @@ def reintentar_whatsapp(id, enlace, env):
     return False, f'No se pudo enviar por WhatsApp ({estado}): {detalle}'
 
 
+# Datos del reporte que puede ver el visitante.
 def vista_publica(r):
-    """Lo único que ve el visitante: sin teléfono, correo, descripción ni observaciones internas."""
     return {'codigo': r['codigo'], 'objeto_nombre': r['objeto_nombre'], 'categoria': r['categoria'], 'estado': r['estado'],
             'fecha_perdida': r['fecha_perdida'], 'fecha_registro': r['fecha_registro'],
             'fecha_actualizacion': r['fecha_actualizacion'], 'nombre': r['nombre'].split()[0],
             'retiro': r['objeto_ubicacion'] if r['estado'] == 'Localizado' and r['objeto_id'] else None}
 
 
+# Seguimiento con el enlace privado.
 def seguimiento(token):
-    """Seguimiento con el enlace privado (el token se compara por su hash)."""
     if not token or len(token) > 100:
         return None
     reporte = visitantes.buscar_por_token(hash_token(token))
     return vista_publica(reporte) if reporte else None
 
 
+# Compara dos teléfonos por sus dígitos.
 def mismo_telefono(guardado, escrito):
     a, b = digitos(guardado), digitos(escrito)
     if len(a) < 8 or len(b) < 8:
@@ -123,6 +123,7 @@ def mismo_telefono(guardado, escrito):
     return hmac.compare_digest(a[-8:], b[-8:])   # acepta el número con o sin código de país
 
 
+# Consulta con código y teléfono.
 def consultar(codigo, telefono):
     codigo = limpiar_codigo(codigo, maximo=20)
     if not PATRON_CODIGO.fullmatch(codigo):
@@ -131,6 +132,7 @@ def consultar(codigo, telefono):
     return vista_publica(reporte) if reporte and mismo_telefono(reporte['telefono'], telefono) else None
 
 
+# Cambia el estado y las observaciones de un reporte.
 def gestionar(id, estado, observaciones, usuario_id):
     observaciones = texto(observaciones) or None
     if estado not in ESTADOS_REPORTE:
@@ -138,6 +140,7 @@ def gestionar(id, estado, observaciones, usuario_id):
     if observaciones and len(observaciones) > LARGO_MAXIMO['observaciones']:
         return False, 'Las observaciones son demasiado largas (máximo 2000 caracteres).'
 
+    # Guarda la gestión.
     def guardar(con):
         r = visitantes.buscar(id, con)
         if not r:
@@ -149,13 +152,14 @@ def gestionar(id, estado, observaciones, usuario_id):
     return en_transaccion(guardar)
 
 
+# Relaciona el reporte con un objeto del catálogo.
 def relacionar_objeto(id, objeto_id, usuario_id):
-    """Relaciona el reporte con un objeto encontrado (o quita la relación si objeto_id viene vacío)."""
     objeto_id = texto(objeto_id)
     if objeto_id and not objeto_id.isdigit():
         return False, 'Elige un objeto válido.'
     objeto_id = int(objeto_id) if objeto_id else None
 
+    # Guarda la relación.
     def guardar(con):
         r = visitantes.buscar(id, con)
         if not r:
@@ -169,22 +173,24 @@ def relacionar_objeto(id, objeto_id, usuario_id):
     return en_transaccion(guardar)
 
 
+# Palabras de un texto, sin tildes ni signos.
 def palabras(texto_libre):
     return {p for p in re.findall(r'\w+', (texto_libre or '').lower()) if len(p) > 3}
 
 
+# Objetos que podrían ser el del reporte.
 def posibles_coincidencias(reporte, limite=5):
-    """Misma categoría, bajo custodia, encontrados desde el día de la pérdida; primero los que comparten más palabras."""
     buscadas = palabras(f"{reporte['objeto_nombre']} {reporte['descripcion']}")
     candidatos = objetos.candidatos(reporte['categoria'], reporte['fecha_perdida'])
 
+    # Cuántas palabras comparte el objeto con el reporte.
     def puntaje(o):
         return len(buscadas & palabras(f"{o['titulo']} {o['descripcion']} {o['descripcion_publica']}"))
     return sorted(candidatos, key=lambda o: (-puntaje(o), o['fecha'], o['id']))[:limite]
 
 
+# Enlaces para llamar o escribir al visitante.
 def enlaces_contacto(reporte):
-    """Enlaces para contactar al visitante desde el panel (llamar, WhatsApp del encargado, correo)."""
     numero = digitos(reporte['telefono'])
     internacional = CODIGO_PAIS + numero if len(numero) == 8 else numero
     saludo = (f"Hola {reporte['nombre'].split()[0]}, te escribimos de objetos perdidos de la UAM por tu reporte "

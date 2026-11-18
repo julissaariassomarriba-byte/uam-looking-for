@@ -1,7 +1,4 @@
-"""Tabla reportes_visitantes. Un visitante no es un usuario: sus datos viven solo en su reporte.
-
-Las listas nunca leen la foto; el enlace privado de seguimiento solo se guarda como hash (token_hash).
-"""
+# Consultas de los reportes de visitantes.
 from .conexion import AHORA, consultar, ejecutar
 
 SQL_REPORTES = '''SELECT r.id, r.codigo, r.nombre, r.telefono, r.correo, r.objeto_nombre, r.categoria, r.descripcion,
@@ -13,6 +10,7 @@ SQL_REPORTES = '''SELECT r.id, r.codigo, r.nombre, r.telefono, r.correo, r.objet
                   LEFT JOIN usuarios u ON u.id = r.actualizado_por'''
 
 
+# Guarda un reporte nuevo.
 def insertar(con, d):
     return ejecutar('''INSERT INTO reportes_visitantes (codigo, token_hash, nombre, telefono, correo, objeto_nombre, categoria,
                        descripcion, lugar_perdida, fecha_perdida, fecha_registro, foto)
@@ -20,9 +18,8 @@ def insertar(con, d):
                        :descripcion, :lugar_perdida, :fecha_perdida, ''' + AHORA + ', :foto)', d, con)
 
 
+# Lista los reportes con filtro y búsqueda.
 def listar(estado=None, codigo='', palabra=''):
-    """Lista del personal: filtra por estado y busca por parte del código (ya sin comodines) o por una palabra en el
-    nombre, el teléfono o el objeto perdido (RF-19); primero lo que falta atender."""
     from .objetos import patron
     palabra = (palabra or '').strip()
     busqueda = ("(r.codigo LIKE :codigo OR r.nombre LIKE :palabra ESCAPE '\\' OR r.telefono LIKE :palabra ESCAPE '\\' "
@@ -33,34 +30,39 @@ def listar(estado=None, codigo='', palabra=''):
                       'palabra': patron(palabra) if palabra else None})
 
 
+# Busca un reporte por id.
 def buscar(id, con=None):
     return consultar(SQL_REPORTES + ' WHERE r.id = ?', (id,), True, con)
 
 
+# Busca un reporte por su enlace privado.
 def buscar_por_token(token_hash):
     return consultar(SQL_REPORTES + ' WHERE r.token_hash = ?', (token_hash,), True)
 
 
+# Busca un reporte por su código.
 def buscar_por_codigo(codigo):
     return consultar(SQL_REPORTES + ' WHERE r.codigo = ?', (codigo,), True)
 
 
+# Cuenta los reportes por estado.
 def contar_por_estado():
     return dict(consultar('SELECT estado, COUNT(*) FROM reportes_visitantes GROUP BY estado'))
 
 
+# Foto de un reporte.
 def foto(id):
     fila = consultar('SELECT foto FROM reportes_visitantes WHERE id = ?', (id,), True)
     return fila['foto'] if fila else None
 
 
+# Guarda la gestión del personal sobre un reporte.
 def gestionar(con, id, estado, observaciones, objeto_id, usuario_id):
-    """Estado, observaciones y objeto relacionado. El trigger exige personal activo."""
     ejecutar(f'''UPDATE reportes_visitantes SET estado = ?, observaciones = ?, objeto_id = ?, actualizado_por = ?,
                 fecha_actualizacion = {AHORA} WHERE id = ?''', (estado, observaciones, objeto_id, usuario_id, id), con)
 
 
+# Guarda el resultado del aviso por WhatsApp.
 def anotar_whatsapp(id, estado, detalle):
-    """Resultado REAL de cada intento de aviso por WhatsApp (los intentos solo aumentan)."""
     ejecutar(f'''UPDATE reportes_visitantes SET whatsapp_estado = ?, whatsapp_detalle = ?,
                 whatsapp_intentos = whatsapp_intentos + 1, whatsapp_fecha = {AHORA} WHERE id = ?''', (estado, detalle, id))

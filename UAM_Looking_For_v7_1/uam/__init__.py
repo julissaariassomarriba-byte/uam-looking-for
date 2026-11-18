@@ -1,13 +1,4 @@
-"""UAM Looking For v9: sistema de objetos perdidos y encontrados del campus (Flask + SQLite).
-
-crear_app() arma la aplicación: configuración, base de datos, seguridad de cada petición, rutas y páginas de error.
-Organización del paquete:
-  config.py, validacion.py, seguridad.py   constantes, revisión de datos y criptografía (sin Flask)
-  datos/        acceso a SQLite (una función por consulta, siempre con parámetros)
-  servicios/    reglas del sistema: devuelven (True, resultado) o (False, mensaje)
-  rutas/        blueprints de Flask: leen la petición, llaman a un servicio y muestran la página
-  utilidades/   fotos, avisos por WhatsApp y PDF
-"""
+# Arma la aplicación Flask: configuración, base de datos, seguridad y rutas.
 import os
 
 from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
@@ -33,17 +24,17 @@ CABECERAS_SEGURIDAD = (('X-Frame-Options', 'DENY'),            # no mostrar el s
                        ('Referrer-Policy', 'same-origin'))     # no enviar la dirección completa a otros sitios
 
 
+# Crea la aplicación; las pruebas pueden pasar otro .env y otra base.
 def crear_app(ruta_env=None, ruta_bd=None):
-    """ruta_env y ruta_bd permiten usar otros archivos (por ejemplo en las pruebas); por defecto, los del proyecto."""
     ruta_env = ruta_env or os.path.join(RAIZ, '.env')
     ruta_bd = ruta_bd or os.path.join(RAIZ, 'database.db')
     ruta_esquema = os.path.join(RAIZ, 'schema.sql')
     env = config.leer_env(ruta_env)
 
     app = Flask(__name__, template_folder=os.path.join(RAIZ, 'templates'), static_folder=os.path.join(RAIZ, 'static'))
-    # Sin SECRET_KEY las sesiones duran solo hasta reiniciar la app (y se avisa en el panel de administración).
+    # Sin SECRET_KEY, las sesiones duran hasta reiniciar la app.
     app.secret_key = env.get('SECRET_KEY') or nuevo_token(32)
-    # COOKIE_SEGURA=1 en el .env: la cookie de sesión solo viaja por HTTPS (actívalo junto con «Force HTTPS»).
+    # COOKIE_SEGURA=1: la cookie de sesión solo viaja por HTTPS.
     app.config.update(RUTA_ENV=ruta_env, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax',
                       SESSION_COOKIE_SECURE=env.get('COOKIE_SEGURA') == '1', MAX_CONTENT_LENGTH=config.TAMANO_MAXIMO_ENVIO)
     app.jinja_env.filters['mes'] = mes_legible
@@ -63,13 +54,16 @@ def crear_app(ruta_env=None, ruta_bd=None):
     return app
 
 
+# Token CSRF de la sesión (lo crea si no existe).
 def token_csrf():
     if 'csrf_token' not in session:
         session['csrf_token'] = nuevo_token()
     return session['csrf_token']
 
 
+# Registra la revisión de sesión, CSRF y cabeceras de seguridad.
 def registrar_seguridad(app):
+    # Carga el usuario de la sesión y revisa el token CSRF en cada POST.
     @app.before_request
     def cargar_usuario_y_revisar_csrf():
         g.usuario = usuarios.buscar(session['usuario_id']) if 'usuario_id' in session else None
@@ -85,6 +79,7 @@ def registrar_seguridad(app):
         if request.method == 'POST' and not (session.get('csrf_token') and iguales(request.form.get('csrf_token'), session['csrf_token'])):
             abort(400, 'Formulario vencido o inválido. Recarga la página e inténtalo de nuevo.')
 
+    # Agrega cabeceras de seguridad a cada respuesta.
     @app.after_request
     def cabeceras_seguridad(respuesta):
         for nombre, valor in CABECERAS_SEGURIDAD:
@@ -92,7 +87,9 @@ def registrar_seguridad(app):
         return respuesta
 
 
+# Registra las páginas de error en español.
 def registrar_errores(app):
+    # Muestra la página de error con un mensaje claro.
     def pagina_error(error):
         codigo = getattr(error, 'code', 500) or 500
         propio = getattr(error, 'description', None)
@@ -105,14 +102,14 @@ def registrar_errores(app):
         app.register_error_handler(codigo, pagina_error)
 
 
+# Dirección del catálogo conservando los filtros actuales.
 def url_filtro(**cambios):
-    """Dirección del catálogo con los filtros actuales más los cambios (None quita uno). Así, al elegir una categoría,
-    no se pierden la búsqueda ni los demás filtros."""
     args = {k: v for k, v in request.args.items() if v}
     args.update(cambios)
     return url_for('objetos.inicio', **{k: v for k, v in args.items() if v not in (None, '')})
 
 
+# Variables que usan todas las plantillas (usuario, rol, avisos).
 def variables_globales():
     personal, estudiante = comun.es_personal(), comun.tiene_rol(config.ROL_ESTUDIANTE)
     return dict(categorias=config.CATEGORIAS, estados=config.ESTADOS, estados_manuales=config.ESTADOS_MANUALES,

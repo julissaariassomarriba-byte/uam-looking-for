@@ -1,17 +1,17 @@
-"""Genera el PDF del historial escribiendo el formato PDF a mano (sin librerías)."""
+# Genera el PDF del historial sin librerías externas.
 from ..config import ESTADOS
 
 ANCHO, ALTO, MARGEN = 792, 612, 40
 VERDE, GRIS, GRIS_FILA, BLANCO = (0, 0.478, 0.514), (0.15, 0.15, 0.15), (0.96, 0.97, 0.97), (1, 1, 1)
 
 
-# Pasa el texto a Windows-1252 (la codificación de las fuentes del PDF) y escapa ( ) y \.
+# Prepara un texto para el PDF.
 def texto_pdf(texto):
     texto = str('' if texto is None else texto).replace('→', '->').encode('cp1252', 'replace').decode('cp1252')
     return texto.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)')
 
 
-# Divide un texto en líneas que quepan en el ancho dado (aprox. 0.52 del tamaño por letra).
+# Parte un texto en líneas que caben en la columna.
 def partir_lineas(texto, ancho, tamano):
     maximo = max(1, int(ancho / (tamano * 0.52)))
     lineas = ['']
@@ -25,30 +25,35 @@ def partir_lineas(texto, ancho, tamano):
     return lineas
 
 
-# Documento PDF mínimo: guarda los comandos de dibujo de cada página y arma el archivo al final.
+# Documento PDF armado a mano, página por página.
 class DocumentoPDF:
+    # Empieza un PDF vacío.
     def __init__(self):
         self.paginas = []
         self.nueva_pagina()
 
+    # Agrega una página.
     def nueva_pagina(self):
         self.ops, self.y = [], ALTO - MARGEN
         self.paginas.append(self.ops)
 
+    # Escribe un texto.
     def texto(self, x, y, contenido, tamano=9, negrita=False, rgb=GRIS):
         self.ops.append(f'{rgb[0]} {rgb[1]} {rgb[2]} rg BT /{"F2" if negrita else "F1"} {tamano} Tf {x:.1f} {y:.1f} Td '
                         f'({texto_pdf(contenido)}) Tj ET')
 
+    # Dibuja un rectángulo.
     def rectangulo(self, x, y, ancho, alto, rgb):
         self.ops.append(f'{rgb[0]} {rgb[1]} {rgb[2]} rg {x:.1f} {y:.1f} {ancho:.1f} {alto:.1f} re f')
 
-    # Si no cabe lo que sigue, pasa a una página nueva.
+    # Baja el cursor y cambia de página si no cabe.
     def espacio(self, alto):
         nueva = self.y - alto < MARGEN + 20
         if nueva:
             self.nueva_pagina()
         return nueva
 
+    # Encabezado de una tabla.
     def encabezado_tabla(self, columnas):
         self.rectangulo(MARGEN, self.y - 20, ANCHO - 2 * MARGEN, 20, VERDE)
         x = MARGEN
@@ -57,7 +62,7 @@ class DocumentoPDF:
             x += ancho
         self.y -= 20
 
-    # Tabla con título; columnas = [(encabezado, ancho), ...]. Repite el encabezado al cambiar de página.
+    # Dibuja una tabla.
     def tabla(self, titulo, columnas, filas):
         self.espacio(60)
         self.texto(MARGEN, self.y - 12, titulo, 12, True)
@@ -79,7 +84,7 @@ class DocumentoPDF:
             self.ops.append(f'0.85 0.87 0.88 RG 0.5 w {MARGEN} {self.y:.1f} m {ANCHO - MARGEN} {self.y:.1f} l S')
         self.y -= 25
 
-    # Arma el archivo: objetos (catálogo, páginas, fuentes y contenido), tabla xref y trailer.
+    # Arma el archivo PDF final.
     def guardar(self):
         total = len(self.paginas)
         objetos = ['<< /Type /Catalog /Pages 2 0 R >>',
@@ -104,7 +109,7 @@ class DocumentoPDF:
         return bytes(salida)
 
 
-# Reporte del historial: encabezado, resumen por estado, tabla de objetos y tabla de movimientos.
+# PDF del historial: resumen, objetos y movimientos.
 def generar_historial(objetos, movimientos, conteo, usuario, fecha):
     doc = DocumentoPDF()
     doc.rectangulo(0, ALTO - 64, ANCHO, 64, VERDE)

@@ -1,4 +1,4 @@
-"""Visitantes sin cuenta (reportar y consultar) y el panel del personal para atender sus reportes."""
+# Rutas del portal de visitantes y su panel.
 from flask import (Blueprint, Response, abort, flash, g, make_response, redirect, render_template, request, session,
                    url_for)
 
@@ -14,23 +14,23 @@ bp = Blueprint('visitantes', __name__)
 ENVIOS_RECORDADOS = 5
 
 
+# Enlace al reporte para el aviso de WhatsApp.
 def enlace_reporte(id):
-    """Enlace al reporte en el panel (para el aviso de WhatsApp). SITIO_URL en el .env fija el dominio público;
-    sin él se usa la dirección con la que llegó la petición."""
     base = (entorno().get('SITIO_URL') or '').strip().rstrip('/')
     return base + url_for('visitantes.reporte', id=id) if base else url_for('visitantes.reporte', id=id, _external=True)
 
 
 # ---------- Visitante (sin sesión) ----------
 
+# Portal del visitante.
 @bp.route('/visitante')
 def portal():
     return render_template('visitantes/visitante.html')
 
 
+# El visitante reporta un objeto perdido.
 @bp.route('/visitante/reportar', methods=['GET', 'POST'])
 def reportar():
-    """Igual que en «Recibir objeto», el código «envio» evita que un doble clic o una recarga lo guarde dos veces."""
     envios = session.get('envios_visitante', {})
     if request.method == 'POST':
         envio = request.form.get('envio', '')
@@ -46,15 +46,16 @@ def reportar():
                            envio=request.form.get('envio') or nuevo_token())
 
 
+# Seguimiento con el enlace privado.
 @bp.route('/visitante/seguimiento/<token>')
 def seguimiento(token):
-    """Enlace privado: solo quien lo tiene ve el estado (en la base solo está el hash del token)."""
     reporte = servicio.seguimiento(token) or abort(404)
     return sin_cache(make_response(render_template(
         'visitantes/visitante_seguimiento.html', r=reporte, nuevo=request.args.get('nuevo') == '1',
         enlace=url_for('visitantes.seguimiento', token=token, _external=True))))
 
 
+# Consulta con código y teléfono.
 @bp.route('/visitante/consultar', methods=['GET', 'POST'])
 def consultar():
     reporte = None
@@ -67,6 +68,7 @@ def consultar():
 
 # ---------- Panel del personal ----------
 
+# Panel de reportes del personal.
 @bp.route('/reportes-visitantes')
 @personal_requerido
 def panel():
@@ -77,6 +79,7 @@ def panel():
                            estado_actual=estado, codigo=codigo, conteo=visitantes.contar_por_estado())
 
 
+# Ficha de un reporte y su gestión.
 @bp.route('/reportes-visitantes/<int:id>', methods=['GET', 'POST'])
 @personal_requerido
 def reporte(id):
@@ -98,6 +101,7 @@ def reporte(id):
                            whatsapp_falta=notificaciones.faltantes(entorno()))
 
 
+# Muestra la foto de un reporte.
 @bp.route('/reportes-visitantes/<int:id>/foto')
 @personal_requerido
 def foto(id):

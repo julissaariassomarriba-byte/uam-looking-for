@@ -1,17 +1,4 @@
-"""Pasa una base de UAM Looking For v6.2 al esquema v7.1 sin perder datos.
-
-crear_app() lo ejecuta solo al iniciar si hace falta.
-1. Copia de respaldo de la base original.  2. Arma la base nueva en memoria.  3. Revisa integridad, llaves
-foráneas y que no falte ningún registro.  4. Solo entonces reemplaza la original. Si algo no cuadra, no toca nada
-y dice qué revisar: no se inventan datos que la versión anterior no guardaba.
-
-Qué cambia respecto a v6.2:
-- contraseñas en texto -> hash PBKDF2 (contrasena_hash);
-- la devolución al dueño ya no es una segunda entrega: pasa a la tabla devoluciones (recuperación + devolución);
-- estados nuevos «Recuperado» y «Devuelto», calculados a partir de los hechos;
-- historial.estado -> historial.estado_nuevo.
-Los triggers se quitan mientras se copian los datos (si no, volverían a escribir el historial) y se vuelven a crear.
-"""
+# Pasa una base de versiones viejas (v6.2) al esquema actual.
 import sqlite3
 
 from ..seguridad import hash_contrasena
@@ -20,7 +7,7 @@ PASOS = [
     """INSERT INTO usuarios (id, nombre, cif, correo, telefono, carrera, rol, activo)
        SELECT id, trim(nombre), nullif(trim(cif), ''), nullif(lower(trim(correo)), ''), nullif(trim(telefono), ''),
               nullif(trim(carrera), ''), rol, activo FROM vieja.usuarios""",
-    # si lo trajo quien lo registró, en v7.1 cuenta como encontrado por el personal (reportado_por vacío)
+    # Si lo trajo quien lo registró, cuenta como encontrado por el personal.
     """INSERT INTO objetos (id, titulo, descripcion, descripcion_publica, categoria, lugar_encontrado, ubicacion, fecha, hora,
                             estado, registrado_por, reportado_por, foto_publica, foto)
        SELECT id, titulo, descripcion, nullif(trim(descripcion_publica), ''), categoria, lugar_encontrado, ubicacion, fecha,
@@ -30,7 +17,7 @@ PASOS = [
        SELECT id, objeto_id, retirado_por, entregado_por, senas, fecha_entrega FROM vieja.entregas WHERE reclamacion_id IS NULL""",
     """INSERT INTO reclamaciones SELECT id, entrega_id, usuario_id, descripcion, nullif(trim(lugar_perdida), ''), fecha_perdida,
               estado, nullif(trim(respuesta), ''), fecha_solicitud, fecha_resolucion, resuelto_por FROM vieja.reclamaciones""",
-    # Momento 1: la «Recuperación» anotada después de aceptar. Momento 2: la entrega al dueño (sus señas van a observaciones).
+    # Momento 1: recuperación. Momento 2: entrega al dueño.
     """INSERT INTO devoluciones (reclamacion_id, recibido_por, fecha_recepcion, devuelto_por, fecha_devolucion, observaciones)
        SELECT r.id, h.usuario_id, h.fecha_hora, d.entregado_por, d.fecha_entrega, 'Señas al devolver: ' || d.senas
        FROM vieja.reclamaciones r JOIN vieja.entregas e ON e.id = r.entrega_id
@@ -38,7 +25,7 @@ PASOS = [
                                           AND accion = 'Recuperación' AND fecha_hora >= r.fecha_resolucion)
        LEFT JOIN vieja.entregas d ON d.reclamacion_id = r.id
        WHERE r.estado = 'Aceptada'""",
-    # La recuperación queda como «Recuperado» y la entrega al dueño (la última «Entrega» del objeto) como «Devolución».
+    # La recuperación pasa a «Recuperado» y la entrega al dueño a «Devolución».
     """INSERT INTO historial (id, objeto_id, usuario_id, accion, estado_nuevo, fecha_hora)
        SELECT h.id, h.objeto_id, h.usuario_id,
               CASE WHEN h.accion = 'Entrega' AND h.id = u.ultima AND u.devuelto THEN 'Devolución' ELSE h.accion END,
@@ -71,11 +58,12 @@ REVISIONES = {
 }
 
 
+# Nombres de las tablas de una base.
 def tablas(con, base='main'):
     return {fila[0] for fila in con.execute(f"SELECT name FROM {base}.sqlite_master WHERE type = 'table'")}
 
 
-# Hace falta migrar si la base tiene datos de antes (tabla entregas) y todavía no tiene devoluciones.
+# Dice si la base es de la versión vieja.
 def necesita_migracion(ruta):
     try:
         con = sqlite3.connect(f'file:{ruta}?mode=ro', uri=True)
@@ -86,6 +74,7 @@ def necesita_migracion(ruta):
     return 'entregas' in nombres and 'devoluciones' not in nombres
 
 
+# Copia los datos de la base vieja al esquema nuevo.
 def migrar(ruta, ruta_esquema):
     original = sqlite3.connect(ruta)
     if 'reclamacion_id' not in [c[1] for c in original.execute('PRAGMA table_info(entregas)')]:
@@ -139,6 +128,7 @@ def migrar(ruta, ruta_esquema):
     print(f'Base migrada a v7.1. Respaldo de la anterior: {respaldo}')
 
 
+# Migra la base solo si hace falta.
 def migrar_si_hace_falta(ruta, ruta_esquema):
     if necesita_migracion(ruta):
         migrar(ruta, ruta_esquema)

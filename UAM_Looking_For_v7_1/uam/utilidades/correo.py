@@ -1,8 +1,4 @@
-"""Envío de correos con la librería estándar de Python (smtplib), sin servicios externos.
-
-Se configura en el .env: SMTP_SERVIDOR, SMTP_PUERTO (587 con STARTTLS o 465 con SSL), SMTP_USUARIO, SMTP_CONTRASENA y
-SMTP_REMITENTE. Si falta el servidor o el remitente, el sistema no intenta enviar y lo dice.
-"""
+# Envío de correos con smtplib.
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -10,12 +6,13 @@ from email.message import EmailMessage
 ESPERA_SEGUNDOS = 15
 
 
+# Dice si el correo está configurado en el .env.
 def configurado(env):
     return bool(env.get('SMTP_SERVIDOR') and env.get('SMTP_REMITENTE'))
 
 
+# Envía un correo por SMTP.
 def enviar(env, para, asunto, texto):
-    """(True, None) si el servidor aceptó el correo; (False, motivo corto) si no. Nunca muestra claves."""
     if not configurado(env):
         return False, 'sin configurar'
     mensaje = EmailMessage()

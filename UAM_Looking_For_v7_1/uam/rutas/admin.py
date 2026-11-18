@@ -1,4 +1,4 @@
-"""Panel de administración (/admin). Las credenciales del administrador están en el .env."""
+# Rutas del administrador: panel y cuentas.
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, session, url_for
 
 from ..config import ROL_ADMIN, ROLES_GESTIONABLES
@@ -10,6 +10,7 @@ bp = Blueprint('admin', __name__, url_prefix='/admin')
 MOVIMIENTOS_RECIENTES = 8
 
 
+# Inicio de sesión del administrador y su panel.
 @bp.route('', methods=['GET', 'POST'])
 def panel():
     if g.usuario and not tiene_rol(ROL_ADMIN):
@@ -36,6 +37,7 @@ def panel():
                            por_vencer=objetos.plazos_por_vencer())
 
 
+# Lista, crea y edita cuentas.
 @bp.route('/usuarios', methods=['GET', 'POST'])
 @bp.route('/usuarios/<int:id>/editar', methods=['GET', 'POST'])
 @admin_requerido
@@ -56,6 +58,7 @@ def usuarios_lista(id=None):
                            busqueda=busqueda, roles=ROLES_GESTIONABLES, datos=f, por_rol=usuarios.contar_cuentas_por_rol())
 
 
+# Activa o desactiva una cuenta.
 @bp.route('/usuarios/<int:id>/estado', methods=['POST'])
 @admin_requerido
 def estado_usuario(id):

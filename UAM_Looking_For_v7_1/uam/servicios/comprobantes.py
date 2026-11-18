@@ -1,21 +1,17 @@
-"""Comprobante de entrega (RF-12 y RF-14).
-
-Se puede imprimir (con espacio para la firma de quien recibe y de quien entrega) o enviar por correo a quien retiró
-el objeto. No lleva las señas ni la descripción interna: un comprobante puede reenviarse y esos datos sirven para
-comprobar quién es el dueño.
-"""
+# Comprobante de entrega: imprimir o enviar por correo.
 from ..datos import objetos, reclamaciones
 from ..utilidades import correo
 from ..validacion import correo_valido, texto
 
 
+# Objeto y entrega para el comprobante.
 def buscar(objeto_id):
-    """{objeto, entrega} si el objeto tiene una entrega registrada; si no, None."""
     objeto = objetos.buscar(objeto_id)
     entrega = reclamaciones.buscar_entrega(objeto_id) if objeto else None
     return {'objeto': objeto, 'entrega': entrega} if entrega else None
 
 
+# Texto del correo del comprobante.
 def texto_correo(c):
     o, e = c['objeto'], c['entrega']
     lineas = [
@@ -33,8 +29,8 @@ def texto_correo(c):
     return '\n'.join(lineas)
 
 
+# Envía el comprobante por correo.
 def enviar(objeto_id, para, env):
-    """Envía el comprobante al correo indicado (por defecto, el registrado de quien lo retiró)."""
     c = buscar(objeto_id)
     if not c:
         return False, 'Este objeto todavía no tiene una entrega registrada.'

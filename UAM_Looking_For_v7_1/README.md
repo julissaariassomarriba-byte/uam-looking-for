@@ -1,4 +1,4 @@
-# UAM Looking For v10.1 (versión definitiva)
+# UAM Looking For v10.2 (versión definitiva)
 
 Sistema de objetos perdidos y encontrados del campus de la Universidad Americana (UAM).
 Hecho solo con **Flask**, **SQLite** (`sqlite3`, incluido en Python), **HTML** y **CSS**. No usa otras librerías:
@@ -11,6 +11,8 @@ de cumplimiento en `docs/CAMBIOS_v10.md`.
 
 La **v10.1** deja como único administrador al del `.env`: al arrancar quita al administrador de prueba de versiones
 anteriores (lo borra si nunca hizo nada; si figura en el historial, lo desactiva y lo oculta de «Cuentas»).
+
+La **v10.2** solo agrega comentarios cortos con `#` en el código: una línea encima de cada función que dice qué hace.
 
 La v9 reorganiza el código en un paquete (`uam/`) por capas, agrega la **validación cruzada de identidad** (un CIF
 registrado ya no se puede usar con el nombre de otra persona), revisa en el servidor todos los datos de los

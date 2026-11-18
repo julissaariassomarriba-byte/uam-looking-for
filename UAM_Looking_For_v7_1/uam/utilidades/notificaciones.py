@@ -1,19 +1,4 @@
-"""Avisos al encargado por WhatsApp Business Cloud API (Meta), sin librerías: urllib de la biblioteca estándar.
-
-Las credenciales van en el .env, nunca en el código (ver .env.example y la guía en README.md):
-  WHATSAPP_TOKEN      token de acceso de Meta (permanente, de un usuario del sistema de Meta Business)
-  WHATSAPP_NUMERO_ID  «Phone number ID» del número que envía (es un id de Meta, no el número de teléfono)
-  WHATSAPP_DESTINO    número del encargado que recibe los avisos, con código de país (ej. 50588887777)
-  WHATSAPP_PLANTILLA  (recomendado) nombre de la plantilla aprobada con 8 variables. Sin plantilla se envía texto
-                      libre, que Meta solo entrega si el encargado le escribió a ese número en las últimas 24 horas.
-  WHATSAPP_IDIOMA     idioma de la plantilla (por defecto es)
-  WHATSAPP_VERSION    versión de la API Graph (por defecto v22.0)
-
-enviar() nunca lanza excepciones ni finge un envío. Devuelve una de estas tres respuestas:
-  ('Enviada', id del mensaje)   WhatsApp aceptó el mensaje y devolvió su id (wamid…)
-  ('Fallida', motivo)           error de Meta, de red o respuesta inesperada
-  ('No configurada', qué falta) faltan datos en el .env: no se intenta la conexión
-"""
+# Aviso por WhatsApp Cloud API (con urllib).
 import json
 import re
 import urllib.error
@@ -24,27 +9,29 @@ OBLIGATORIAS = ('WHATSAPP_TOKEN', 'WHATSAPP_NUMERO_ID', 'WHATSAPP_DESTINO')
 TIEMPO_MAXIMO = 10   # segundos: si WhatsApp no responde, el reporte ya está guardado y se puede reintentar
 
 
+# Variables de WhatsApp que faltan en el .env.
 def faltantes(env):
-    """Variables obligatorias que faltan en el .env (lista vacía = configurado)."""
     return [c for c in OBLIGATORIAS if not (env.get(c) or '').strip()]
 
 
+# Deja solo los dígitos de un número.
 def solo_digitos(numero):
     return re.sub(r'\D', '', numero or '')
 
 
-# Meta no acepta saltos de línea, tabuladores ni más de 4 espacios seguidos en las variables de una plantilla.
+# Limpia y recorta un texto para la plantilla (sin saltos de línea).
 def variable(texto, maximo=200):
     texto = re.sub(r'\s+', ' ', str(texto or '')).strip() or '-'
     return texto if len(texto) <= maximo else texto[:maximo - 1] + '…'
 
 
-# Datos del aviso, en el orden de las variables {{1}} a {{8}} de la plantilla.
+# Datos del aviso, en el orden de la plantilla ({{1}} a {{8}}).
 def datos_aviso(reporte, enlace):
     return [reporte['codigo'], reporte['nombre'], reporte['objeto_nombre'], reporte['descripcion'],
             reporte['lugar_perdida'], reporte['fecha_perdida'], reporte['telefono'], enlace]
 
 
+# Texto del aviso.
 def texto_aviso(reporte, enlace):
     codigo, nombre, objeto, descripcion, lugar, fecha, telefono, enlace = datos_aviso(reporte, enlace)
     return (f'UAM Looking For · Nuevo reporte de objeto perdido {codigo}\n'
@@ -53,8 +40,8 @@ def texto_aviso(reporte, enlace):
             f'Revisar (requiere iniciar sesión): {enlace}')
 
 
+# Mensaje que se envía a WhatsApp.
 def mensaje(env, reporte, enlace):
-    """Cuerpo JSON que se envía a /messages: plantilla si hay WHATSAPP_PLANTILLA, si no, texto libre."""
     cuerpo = {'messaging_product': 'whatsapp', 'to': solo_digitos(env['WHATSAPP_DESTINO'])}
     if (env.get('WHATSAPP_PLANTILLA') or '').strip():
         cuerpo.update(type='template', template={
@@ -65,8 +52,8 @@ def mensaje(env, reporte, enlace):
     return cuerpo
 
 
+# Mensaje claro del error que devuelve WhatsApp.
 def motivo_http(error, token):
-    """Mensaje claro a partir del error que devuelve Meta (nunca incluye el token)."""
     try:
         datos = json.loads(error.read().decode('utf-8')).get('error', {})
         detalle = datos.get('error_data', {}).get('details') or datos.get('message') or ''
@@ -76,6 +63,7 @@ def motivo_http(error, token):
     return texto.replace(token, '***')[:300]
 
 
+# Envía el aviso por WhatsApp.
 def enviar(env, reporte, enlace):
     falta = faltantes(env)
     if falta:

@@ -1,1 +1,1 @@
-"""Utilidades sin dependencias del resto del sistema: fotos, avisos por WhatsApp y PDF."""
+# Utilidades: fotos, WhatsApp, correo y PDF.

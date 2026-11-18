@@ -1,25 +1,17 @@
-"""Personas que traen o retiran un objeto en ventanilla, con validación cruzada de identidad.
-
-Hasta la v8.5, si el encargado escribía un CIF que ya existía, el sistema usaba esa fila aunque el nombre escrito
-fuera de otra persona (y en personas sin cuenta, incluso le cambiaba el nombre). Desde la v9:
-- un CIF registrado solo se acepta si el nombre escrito corresponde a esa persona (o si el nombre se deja vacío
-  donde el formulario lo permite);
-- un estudiante con cuenta no puede quedar anotado como docente, administrativo o visitante;
-- un correo que ya pertenece a otra persona se rechaza (antes se descartaba en silencio);
-- los datos de una persona ya registrada nunca se sobrescriben: solo se completa el contacto que faltaba.
-"""
+# Identifica a la persona por su CIF (validación cruzada).
 from ..config import ROL_ESTUDIANTE, TIPOS_PERSONA
 from ..datos import usuarios
 from ..validacion import (cif_valido, correo_valido, limpiar_cif, mismo_nombre, muy_largo, primer_error, telefono_valido,
                           texto)
 
 
+# Dice si la persona tiene cuenta.
 def es_cuenta(fila):
     return bool(fila['contrasena_hash']) or fila['rol'] == 'Administrador'
 
 
+# Mensaje si el nombre no coincide con el del CIF.
 def conflicto_de_identidad(fila, nombre, tipo):
-    """Mensaje si los datos escritos no corresponden a la persona registrada con ese CIF (None si corresponden)."""
     if nombre and not mismo_nombre(nombre, fila['nombre']):
         return (f'El CIF {fila["cif"]} ya está registrado a nombre de {fila["nombre"]}. Revisa el carné: '
                 f'si es otra persona, corrige el CIF; si es la misma, escribe su nombre como está registrado.')
@@ -28,11 +20,8 @@ def conflicto_de_identidad(fila, nombre, tipo):
     return None
 
 
+# Busca o registra a la persona y devuelve su id.
 def resolver(con, nombre, tipo, cif, telefono, correo, papel='quien entrega el objeto'):
-    """Devuelve (True, id) de la persona (existente o nueva) o (False, mensaje).
-
-    papel: cómo se nombra a la persona en los mensajes («quien entrega el objeto», «quien lo retira»).
-    """
     nombre, cif, telefono = texto(nombre), limpiar_cif(cif) or None, texto(telefono) or None
     correo = texto(correo).lower() or None
     error = primer_error([

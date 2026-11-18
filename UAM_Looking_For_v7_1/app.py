@@ -1,8 +1,4 @@
-"""Punto de entrada de UAM Looking For v9.
-
-PythonAnywhere (archivo WSGI) hace «from app import app as application»; en tu computadora: python app.py
-Todo el código está en el paquete uam/ (ver uam/__init__.py).
-"""
+# Punto de entrada: crea la aplicación para PythonAnywhere.
 from uam import crear_app
 
 app = crear_app()

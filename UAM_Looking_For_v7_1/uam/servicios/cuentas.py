@@ -1,4 +1,4 @@
-"""Cuentas: inicio de sesión, administrador del .env, registro de estudiantes y gestión desde el panel."""
+# Cuentas: administrador, inicio de sesión, registro y perfil.
 import sqlite3
 
 from ..config import LARGO_MAXIMO, ROL_ADMIN, ROL_ESTUDIANTE, ROLES_GESTIONABLES
@@ -14,21 +14,24 @@ MENSAJE_CIF_OCUPADO = 'Este CIF ya está registrado. Si es tuyo, comunícate con
 
 # ---------- Administrador definido en el .env ----------
 
+# Dice si el .env tiene usuario y contraseña de administrador.
 def admin_configurado(env):
     return bool(env.get('ADMIN_USUARIO') and env.get('ADMIN_CONTRASENA'))
 
 
+# Dice si ese usuario es el administrador del .env.
 def es_admin_del_env(usuario, env):
     return admin_configurado(env) and usuario['cif'] == limpiar_cif(env['ADMIN_USUARIO'])
 
 
+# Valida el usuario y la contraseña del administrador.
 def validar_admin(usuario, contrasena, env):
     return (admin_configurado(env) and limpiar_cif(usuario) == limpiar_cif(env['ADMIN_USUARIO'])
             and iguales(contrasena, env['ADMIN_CONTRASENA']))
 
 
+# Guarda al administrador del .env y quita a los anteriores.
 def sincronizar_admin(env):
-    """Guarda al administrador en usuarios (sin hash) para que su nombre salga en el historial. Devuelve su id."""
     if not admin_configurado(env):
         return None
     cif = limpiar_cif(env['ADMIN_USUARIO'])
@@ -40,8 +43,8 @@ def sincronizar_admin(env):
 
 # ---------- Inicio de sesión ----------
 
+# Valida el CIF y la contraseña al iniciar sesión.
 def validar_login(cif, contrasena):
-    """La cuenta si el CIF y la contraseña coinciden; None si no (el mensaje no dice cuál de los dos falló)."""
     contrasena = contrasena or ''
     if len(contrasena) > LARGO_MAXIMO['contrasena']:
         return None
@@ -55,6 +58,7 @@ def validar_login(cif, contrasena):
 
 # ---------- Crear y editar cuentas ----------
 
+# Revisa los datos de una cuenta antes de guardarla.
 def revisar_datos_cuenta(nombre, cif, correo, carrera, rol, contrasena, contrasena_obligatoria):
     return primer_error([
         (len(nombre) < 3, 'Escribe el nombre completo.'),
@@ -69,16 +73,13 @@ def revisar_datos_cuenta(nombre, cif, correo, carrera, rol, contrasena, contrase
     ])
 
 
+# Dice si un dato ya pertenece a otra persona.
 def ocupado_por_otro(fila, id_propio):
     return fila is not None and fila['id'] != id_propio
 
 
+# Crea o edita una cuenta desde el panel.
 def guardar_usuario(nombre, cif, correo, carrera, rol, contrasena, id=None):
-    """Crea (id=None) o edita una cuenta desde el panel. Al editar, la contraseña es opcional.
-
-    Si el CIF es de una persona de ventanilla (sin cuenta) con el mismo nombre, la cuenta se crea sobre esa fila,
-    así conserva su historial. Si el nombre no corresponde, se rechaza: el CIF es de otra persona.
-    """
     nombre, cif, correo = texto(nombre), limpiar_cif(cif), texto(correo).lower()
     carrera, contrasena = texto(carrera) or None, contrasena or ''
     nueva = id is None
@@ -112,12 +113,8 @@ def guardar_usuario(nombre, cif, correo, carrera, rol, contrasena, id=None):
         return False, 'El correo o el CIF ya pertenece a otra cuenta.'
 
 
+# Registra a un estudiante.
 def registrar_estudiante(nombre, cif, correo, contrasena, confirmar, carrera=None):
-    """Registro público: el estudiante crea su propia cuenta y siempre recibe el rol Estudiante.
-
-    Si ya vino a ventanilla como estudiante (sin cuenta) y el nombre corresponde, la cuenta se crea sobre esa fila.
-    Un CIF con cuenta, de otro tipo de persona o con otro nombre no se puede usar.
-    """
     if (contrasena or '') != (confirmar or ''):
         return False, 'Las contraseñas no coinciden.'
     if len(texto(carrera)) < 3:
@@ -128,6 +125,7 @@ def registrar_estudiante(nombre, cif, correo, contrasena, confirmar, carrera=Non
     return guardar_usuario(nombre, cif, correo, carrera, ROL_ESTUDIANTE, contrasena)
 
 
+# Activa o desactiva una cuenta.
 def cambiar_activo(id, activo):
     usuario = usuarios.buscar(id)
     if not usuario or usuario['rol'] not in ROLES_GESTIONABLES or not usuario['contrasena_hash']:
@@ -136,15 +134,15 @@ def cambiar_activo(id, activo):
     return True, 'Cuenta reactivada.' if activo else 'Cuenta desactivada. Ya no podrá iniciar sesión.'
 
 
+# Dice si el usuario es administrador.
 def es_admin(usuario):
     return usuario is not None and usuario['rol'] == ROL_ADMIN
 
 
 # ---------- Mi perfil (RF-05) ----------
 
+# Guarda los cambios de «Mi perfil».
 def actualizar_perfil(usuario, correo, carrera, telefono):
-    """La persona corrige su correo, carrera y teléfono. El nombre, el CIF y el rol solo los cambia el administrador
-    (son su identidad). El administrador del .env no se edita aquí: sus datos salen de ese archivo."""
     if usuario['rol'] == ROL_ADMIN:
         return False, 'Los datos del administrador se cambian en el archivo .env del servidor.'
     correo, carrera, telefono = texto(correo).lower(), texto(carrera), texto(telefono)
@@ -163,6 +161,7 @@ def actualizar_perfil(usuario, correo, carrera, telefono):
     return True, 'Tus datos se guardaron.'
 
 
+# Cambia la contraseña desde «Mi perfil».
 def cambiar_contrasena(usuario, actual, nueva, confirmar):
     if usuario['rol'] == ROL_ADMIN:
         return False, 'La contraseña del administrador se cambia en el archivo .env del servidor.'

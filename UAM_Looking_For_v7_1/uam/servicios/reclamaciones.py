@@ -1,9 +1,4 @@
-"""Entrega inicial, reclamaciones y devolución al dueño.
-
-Recorrido: bajo custodia -> Entregado (alguien lo retira) -> Por recuperar (se acepta la reclamación del dueño)
--> Recuperado (el personal lo recibe de quien se lo llevó) -> Devuelto (se entrega al dueño).
-Una reclamación pasa de Pendiente a Aceptada o Rechazada; desde la v9 el estudiante ya no puede cancelarla.
-"""
+# Reglas de entregas, reclamaciones y devoluciones.
 from ..config import ESTADOS_MANUALES
 from ..datos import objetos, reclamaciones, usuarios
 from ..datos.conexion import hoy
@@ -13,8 +8,9 @@ from . import en_transaccion, personas
 MINIMO_DESCRIPCION_RECLAMO, MINIMO_SENAS = 15, 10
 
 
-# ---------- Entrega inicial: registra quién retira. La base pasa el objeto a «Entregado» y lo anota. ----------
+# ---------- Entrega inicial ----------
 
+# Registra la entrega de un objeto.
 def registrar_entrega(objeto_id, nombre, tipo, cif, telefono, senas, confirmado, encargado_id):
     nombre, senas = texto(nombre), texto(senas)
     error = primer_error([
@@ -26,6 +22,7 @@ def registrar_entrega(objeto_id, nombre, tipo, cif, telefono, senas, confirmado,
         (not confirmado, 'Confirma que revisaste el carné y que las señas coinciden con el registro.'),
     ])
 
+    # Guarda la persona y la entrega.
     def guardar(con):
         objeto = objetos.buscar(objeto_id, con=con)
         if not objeto:
@@ -44,8 +41,8 @@ def registrar_entrega(objeto_id, nombre, tipo, cif, telefono, senas, confirmado,
 
 # ---------- Reclamaciones ----------
 
+# Un estudiante reclama un objeto ya entregado.
 def crear_reclamacion(objeto_id, usuario, descripcion, lugar_perdida, fecha_perdida, telefono):
-    """Un estudiante reclama un objeto que otra persona ya retiró. El teléfono se guarda en su cuenta."""
     descripcion, lugar_perdida = texto(descripcion), texto(lugar_perdida) or None
     fecha_perdida, telefono = texto(fecha_perdida) or None, texto(telefono) or None
     error = primer_error([
@@ -59,6 +56,7 @@ def crear_reclamacion(objeto_id, usuario, descripcion, lugar_perdida, fecha_perd
         (telefono is not None and not telefono_valido(telefono), 'Escribe un número de teléfono válido (al menos 8 dígitos).'),
     ])
 
+    # Guarda la reclamación.
     def guardar(con):
         objeto = objetos.buscar(objeto_id, con=con)
         entrega = reclamaciones.buscar_entrega(objeto_id, con)
@@ -79,12 +77,13 @@ def crear_reclamacion(objeto_id, usuario, descripcion, lugar_perdida, fecha_perd
     return en_transaccion(guardar)
 
 
+# Acepta o rechaza una reclamación.
 def gestionar_reclamacion(id, accion, nota, encargado_id):
-    """Aceptar o rechazar (con motivo). Al aceptar, las demás pendientes del mismo objeto se rechazan."""
     nota = texto(nota) or None
     if muy_largo(nota, 'nota'):
         return False, mensaje_largo('nota', 'El texto de la nota')
 
+    # Guarda la decisión y rechaza las demás si se acepta.
     def guardar(con):
         r = reclamaciones.buscar(id, con)
         if not r:
@@ -107,14 +106,15 @@ def gestionar_reclamacion(id, accion, nota, encargado_id):
     return en_transaccion(guardar)
 
 
-# ---------- Devolución en dos momentos. La base pone el estado y lo anota en el historial. ----------
+# ---------- Devolución en dos momentos ----------
 
+# Registra que el objeto volvió a la oficina.
 def registrar_recuperacion(objeto_id, observaciones, encargado_id):
-    """Momento 1: el encargado recibe el objeto de quien se lo llevó -> «Recuperado»."""
     observaciones = texto(observaciones) or None
     if muy_largo(observaciones, 'observaciones'):
         return False, mensaje_largo('observaciones', 'El texto de las observaciones')
 
+    # Guarda la recuperación.
     def guardar(con):
         r = reclamaciones.aceptada_de_objeto(objeto_id, con)
         if not r or r['objeto_estado'] != 'Por recuperar':
@@ -124,12 +124,13 @@ def registrar_recuperacion(objeto_id, observaciones, encargado_id):
     return en_transaccion(guardar)
 
 
+# Entrega el objeto a su dueño.
 def devolver_al_dueno(objeto_id, confirmado, observaciones, encargado_id):
-    """Momento 2: el encargado se lo entrega a su dueño, después de revisar su carné -> «Devuelto»."""
     observaciones = texto(observaciones) or None
     if muy_largo(observaciones, 'observaciones'):
         return False, mensaje_largo('observaciones', 'El texto de las observaciones')
 
+    # Guarda la devolución.
     def guardar(con):
         r = reclamaciones.aceptada_de_objeto(objeto_id, con)
         if not r or r['objeto_estado'] != 'Recuperado':

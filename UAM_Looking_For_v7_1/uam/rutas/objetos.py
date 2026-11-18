@@ -1,4 +1,4 @@
-"""Catálogo, ficha de cada objeto, recepción, entrega e historial."""
+# Rutas del catálogo, objetos, entregas e historial.
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, session, url_for
 
 import re
@@ -19,16 +19,16 @@ bp = Blueprint('objetos', __name__)
 ENVIOS_RECORDADOS = 10   # formularios de recepción recordados para no guardar dos veces el mismo objeto
 
 
+# Catálogo con búsqueda y filtros.
 @bp.route('/')
 @login_requerido
 def inicio():
     categoria, ubicacion = opcion('categoria', CATEGORIAS), opcion('ubicacion', UBICACIONES)
     personal = es_personal()
-    # Los objetos entregados hace más del plazo ya no salen en el catálogo; el personal los revisa en «Ocultos».
-    # «Por vencer» (solo personal): bajo custodia con 3 días o menos de plazo, o ya vencidos (RF-16).
+    # Pestañas del personal: «Ocultos» y «Por vencer».
     ver_ocultos = personal and request.args.get('ocultos') == '1'
     ver_vencer = personal and not ver_ocultos and request.args.get('vencer') == '1'
-    # Búsqueda (RF-10 y RF-19): palabra clave para todos; el estudiante filtra por mes y el personal por fechas y estado.
+    # Búsqueda: palabra clave para todos; mes (estudiante) o fechas y estado (personal).
     filtros = {'q': (request.args.get('q') or '').strip()[:100] or None,
                'mes': valor_si(request.args.get('mes'), lambda v: re.fullmatch(r'\d{4}-\d{2}', v)) if not personal else None,
                'desde': valor_si(request.args.get('desde'), fecha_valida) if personal else None,
@@ -43,38 +43,40 @@ def inicio():
                            por_ubicacion=objetos.contar_por('ubicacion', visibles=True))
 
 
+# Muestra la foto de un objeto.
 @bp.route('/objeto/<int:id>/foto')
 @login_requerido
 def foto(id):
-    """Foto leída de la base. El personal ve todas; un estudiante solo las marcadas como públicas."""
     f = objetos.buscar_foto(id)
     if not f or not (es_personal() or f['foto_publica']):
         abort(404)
     return Response(f['foto'], mimetype=imagenes.formato(f['foto']), headers={'Cache-Control': 'private, max-age=86400'})
 
 
+# Valor de un filtro solo si tiene el formato correcto.
 def valor_si(valor, valido):
-    """El valor de un filtro solo si tiene el formato esperado; si no, se ignora (sin filtro)."""
     valor = (valor or '').strip()
     return valor if valor and valido(valor) else None
 
 
+# Guía rápida.
 @bp.route('/guia')
 @login_requerido
 def guia():
     return render_template('objetos/guia.html', horario=entorno().get('HORARIO_ATENCION', '').strip())
 
 
+# Comprobante de entrega para imprimir.
 @bp.route('/objeto/<int:id>/comprobante')
 @personal_requerido
 def comprobante(id):
-    """Comprobante de entrega para imprimir (con firmas) o para revisar antes de enviarlo por correo."""
     c = comprobantes.buscar(id)
     if not c:
         abort(404)
     return render_template('objetos/comprobante.html', c=c, impreso=ahora()[:16])
 
 
+# Envía el comprobante por correo.
 @bp.route('/objeto/<int:id>/comprobante/enviar', methods=['POST'])
 @personal_requerido
 def enviar_comprobante(id):
@@ -82,6 +84,7 @@ def enviar_comprobante(id):
     return redirect(url_for('objetos.detalle', id=id))
 
 
+# Ficha del objeto y sus acciones del personal.
 @bp.route('/objeto/<int:id>', methods=['GET', 'POST'])
 @login_requerido
 def detalle(id):
@@ -105,9 +108,8 @@ def detalle(id):
     return mostrar_detalle(id)
 
 
+# Arma la ficha según quién la ve.
 def mostrar_detalle(id, datos_entrega=None):
-    """El personal ve el registro completo; un estudiante, solo la parte pública.
-    Si una entrega no se pudo guardar, se vuelve a mostrar con lo que escribió el encargado (datos_entrega)."""
     personal = es_personal()
     objeto = objetos.buscar(id, publico=not personal) or abort(404)
     entrega = reclamaciones.buscar_entrega(id)
@@ -122,10 +124,10 @@ def mostrar_detalle(id, datos_entrega=None):
                            datos_entrega=datos_entrega or {})
 
 
+# Registra la entrega de un objeto.
 @bp.route('/objeto/<int:id>/entregar', methods=['POST'])
 @personal_requerido
 def entregar(id):
-    """Registra quién retira el objeto (entrega inicial). Es la única forma de marcarlo como «Entregado»."""
     f = request.form
     if avisar(*servicio_reclamaciones.registrar_entrega(id, f.get('nombre'), f.get('tipo'), f.get('cif'), f.get('telefono'),
                                                          f.get('senas'), f.get('confirmado') == '1', g.usuario['id'])):
@@ -133,11 +135,10 @@ def entregar(id):
     return mostrar_detalle(id, datos_entrega=f)
 
 
+# Recibir objeto: registra un objeto encontrado.
 @bp.route('/reportar', methods=['GET', 'POST'])
 @personal_requerido
 def reportar():
-    """Recepción de un objeto. Cada formulario lleva un código «envio»: si llega dos veces (doble clic o recarga),
-    no se crea un objeto repetido, se abre el que ya se guardó."""
     envios = session.get('envios', {})
     if request.method == 'POST':
         envio = request.form.get('envio', '')
@@ -151,6 +152,7 @@ def reportar():
     return render_template('objetos/reportar.html', datos=request.form, hoy=hoy(), envio=request.form.get('envio') or nuevo_token())
 
 
+# Página del historial.
 @bp.route('/historial')
 @personal_requerido
 def historial():
@@ -159,6 +161,7 @@ def historial():
                            limpiezas=objetos.listar_limpiezas() if tiene_rol(ROL_ADMIN) else [])
 
 
+# Limpia el historial (solo el administrador).
 @bp.route('/historial/limpiar', methods=['POST'])
 @requiere(ROL_ADMIN, mensaje='Solo el administrador puede limpiar el historial.')
 def limpiar_historial():
@@ -167,10 +170,10 @@ def limpiar_historial():
     return redirect(url_for('objetos.historial'))
 
 
+# Descarga el historial en PDF.
 @bp.route('/historial/pdf')
 @personal_requerido
 def historial_pdf():
-    """Descarga el historial como PDF (reporte_pdf lo arma sin librerías)."""
     fecha = ahora()
     pdf = reporte_pdf.generar_historial(objetos.listar(ocultos=None), objetos.listar_historial(), objetos.contar_por('estado'),
                                         g.usuario['nombre'], fecha)

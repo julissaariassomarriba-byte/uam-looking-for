@@ -1,4 +1,4 @@
-"""Inicio de sesión, registro de estudiantes y cierre de sesión."""
+# Rutas de inicio de sesión, registro y perfil.
 from flask import Blueprint, flash, g, redirect, render_template, request, session, url_for
 
 from ..servicios import cuentas
@@ -7,6 +7,7 @@ from .comun import avisar, login_requerido
 bp = Blueprint('acceso', __name__)
 
 
+# Inicio de sesión de estudiantes y encargados.
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     if g.usuario:
@@ -25,9 +26,9 @@ def login():
     return render_template('acceso/login.html')
 
 
+# Registro de estudiantes.
 @bp.route('/registro', methods=['GET', 'POST'])
 def registro():
-    """Registro público (botón debajo de «Acceder»). Solo crea cuentas con rol Estudiante."""
     if g.usuario:
         return redirect(url_for('objetos.inicio'))
     f = request.form
@@ -42,19 +43,19 @@ def registro():
     return render_template('acceso/login.html', registro=True, datos=f)
 
 
+# Cierra la sesión (solo por POST).
 @bp.route('/logout', methods=['POST'])
 def logout():
-    """Solo por POST (con token CSRF): un enlace o una imagen de otro sitio no puede cerrar la sesión."""
     era_admin = session.get('acceso_admin')
     session.clear()
     flash('Has cerrado sesión correctamente.', 'exito')
     return redirect(url_for('admin.panel' if era_admin else 'acceso.login'))
 
 
+# Página «Mi perfil».
 @bp.route('/perfil', methods=['GET', 'POST'])
 @login_requerido
 def perfil():
-    """Mi perfil (RF-05): nombre, CIF, carrera y correo. Se corrigen correo, carrera y teléfono, y se cambia la contraseña."""
     f = request.form
     if request.method == 'POST':
         if f.get('accion') == 'contrasena':
